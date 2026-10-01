@@ -28,8 +28,11 @@
 	#vig::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(120,0,0,0) 50%, rgba(160,0,0,.55) 100%); opacity: var(--fear, 0); transition: opacity .5s; }
 	#grain { position: fixed; inset: -50%; pointer-events: none; opacity: .09; mix-blend-mode: overlay; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); animation: grain .5s steps(5) infinite; }
 	@keyframes grain { 0% { transform: translate(0,0); } 20% { transform: translate(-6%,4%); } 40% { transform: translate(5%,-7%); } 60% { transform: translate(-4%,-3%); } 80% { transform: translate(7%,6%); } 100% { transform: translate(0,0); } }
+	#dying { z-index: 3; position: fixed; inset: 0; pointer-events: none; opacity: 0; --close: 120%; transition: opacity 1s;
+		background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) var(--close), #000 calc(var(--close) + 30%)), radial-gradient(ellipse at center, rgba(90,0,0,0) 20%, rgba(130,0,0,.75) 100%); }
+	#ecg { z-index: 3; position: fixed; left: 10vw; top: 14vh; width: 80vw; height: 90px; pointer-events: none; opacity: 0; transition: opacity 1s; }
 	#flash { z-index: 4; position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
-	#over { z-index: 5; position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(120, 0, 0, 0.55); backdrop-filter: blur(3px); text-align: center; }
+	#over { z-index: 5; position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(25, 0, 0, 0.6); text-align: center; }
 	#over.show { display: flex; }
 	#over h2 { margin: 0; font-size: clamp(44px, 12vw, 110px); letter-spacing: 0.12em; color: #fff; text-shadow: 0 0 30px #f00; }
 	#over p { margin: 0 0 12px; font-size: 20px; }
@@ -59,6 +62,8 @@
 </div>
 <div id="vig"></div>
 <div id="grain"></div>
+<div id="dying"></div>
+<canvas id="ecg" width="960" height="90"></canvas>
 <div id="flash"></div>
 <div id="over">
 	<h2>BANG!</h2>
@@ -487,7 +492,71 @@ let smoking = false;
 let push = 0; // slow dolly toward the muzzle during the standoff
 let hush = false; // dead silence right before the hammer falls
 let drone, droneGain;
-const vigEl = $( 'vig' );
+const vigEl = $( 'vig' ), dyingEl = $( 'dying' ), ecgEl = $( 'ecg' );
+let flatOsc = null;
+let ecgStart = - 1; // performance.now() when the shot landed
+const ECG_BEATS = [ [ 0.6, 0.9 ], [ 1.7, 0.7 ], [ 3.1, 0.45 ], [ 5.0, 0.22 ] ];
+const FLAT_AT = 6.2;
+
+function resetDeath() {
+
+	renderer.domElement.style.transition = 'none';
+	renderer.domElement.style.filter = '';
+	dyingEl.style.transition = 'none'; dyingEl.style.opacity = '0'; dyingEl.style.setProperty( '--close', '120%' );
+	ecgEl.style.transition = 'none'; ecgEl.style.opacity = '0';
+	ecgStart = - 1;
+	if ( flatOsc ) { try { flatOsc.stop(); } catch ( e ) {} flatOsc = null; }
+	void dyingEl.offsetWidth;
+	dyingEl.style.transition = ''; ecgEl.style.transition = '';
+
+}
+
+// the moment after the shot: the world drains of colour, the heart stutters, tunnel vision closes in, then a flatline
+async function dying() {
+
+	renderer.domElement.style.transition = 'filter 4s ease-in';
+	renderer.domElement.style.filter = 'grayscale(1) blur(3px) brightness(0.5)';
+	dyingEl.style.opacity = '1'; ecgEl.style.opacity = '1';
+	ecgStart = performance.now();
+	ECG_BEATS.forEach( ( [ at, v ] ) => { tween( at, () => {} ).then( () => { if ( state === 'dead' ) sfx.heart( 0.9 * v ); } ); } );
+	tween( FLAT_AT, () => {} ).then( () => {
+
+		if ( state !== 'dead' ) return;
+		const a = audio(); if ( ! a ) return;
+		flatOsc = a.createOscillator(); flatOsc.frequency.value = 1000;
+		const g = a.createGain(); g.gain.value = 0.05;
+		flatOsc.connect( g ).connect( a.destination ); flatOsc.start();
+
+	} );
+	await tween( FLAT_AT + 0.5, t => { dyingEl.style.setProperty( '--close', ( 120 - 125 * t * t ) + '%' ); }, ease.lin );
+
+}
+
+const ecgCtx = ecgEl.getContext( '2d' );
+function drawEcg() {
+
+	if ( ecgStart < 0 ) return;
+	const W = ecgEl.width, H = ecgEl.height, now = ( performance.now() - ecgStart ) / 1000, win = 4;
+	ecgCtx.clearRect( 0, 0, W, H );
+	ecgCtx.strokeStyle = '#5dff8a'; ecgCtx.lineWidth = 2.5; ecgCtx.shadowColor = '#3f6'; ecgCtx.shadowBlur = 10;
+	ecgCtx.beginPath();
+	for ( let x = 0; x <= W; x ++ ) {
+
+		const t = now - win + ( x / W ) * win;
+		let y = 0;
+		if ( t > 0 && t < FLAT_AT ) for ( const [ at, v ] of ECG_BEATS ) {
+
+			const d = t - at;
+			y += v * ( Math.exp( - Math.pow( d / 0.025, 2 ) ) - 0.25 * Math.exp( - Math.pow( ( d - 0.07 ) / 0.04, 2 ) ) + 0.18 * Math.exp( - Math.pow( ( d - 0.25 ) / 0.07, 2 ) ) );
+
+		}
+		const py = H / 2 - y * H * 0.42;
+		x ? ecgCtx.lineTo( x, py ) : ecgCtx.moveTo( x, py );
+
+	}
+	ecgCtx.stroke();
+
+}
 
 function tension() { return state === 'dead' ? 0 : Math.pow( 1 / ( CHAMBERS - pulls ), 0.8 ) * ( 0.55 + 0.6 * aim ); }
 
@@ -539,6 +608,7 @@ async function newGame() {
 	state = 'busy';
 	overEl.classList.remove( 'show' );
 	smoking = false;
+	resetDeath();
 	score = 0; pulls = 0;
 	setAim( 0, 0.8 );
 	bullet = Math.floor( Math.random() * CHAMBERS );
@@ -635,6 +705,7 @@ async function pull() {
 async function bang() {
 
 	state = 'dead';
+	updateUI();
 	sfx.bang();
 	rounds.forEach( ( r, i ) => r.visible = i === bullet );
 	flashSprite.visible = true;
@@ -663,8 +734,8 @@ async function bang() {
 		try { localStorage.setItem( 'roulette-best', String( best ) ); } catch ( e ) {}
 
 	}
-	await wait( 0.8 );
-	overText.textContent = score > 0 ? `${score}번 살아남았습니다.` : '첫 발에 당했습니다…';
+	await dying();
+	overText.textContent = ( score > 0 ? `${score}번 살아남았지만… ` : '첫 발에 당했습니다… ' ) + '심장이 멈췄습니다.';
 	overEl.classList.add( 'show' );
 	updateUI();
 
@@ -771,6 +842,7 @@ renderer.setAnimationLoop( () => {
 	const fov = 40 - 8 * e - 6 * push * e;
 	if ( camera.fov !== fov ) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
+	drawEcg();
 	composer.render();
 
 } );
