@@ -469,6 +469,8 @@ const sfx = {
 		o.connect( g ).connect( a.destination ); o.start( now ); o.stop( now + 5 );
 
 	},
+	exhale: () => { noise( 1.4, 'bandpass', 900, 350, 0.22 ); },
+	creak: () => { tone( 180 + Math.random() * 60, 0.35, 0.03, 'sawtooth', 120 ); },
 	heart: v => { tone( 62, 0.16, 0.5 * v, 'sine', 38 ); tone( 58, 0.16, 0.35 * v, 'sine', 36, 0.17 ); }
 };
 
@@ -482,9 +484,12 @@ let state = 'busy'; // idle | busy | dead
 let recoil = 0, shake = 0;
 let aim = 0; // 0 = side view, 1 = looking down the barrel
 let smoking = false;
+let push = 0; // slow dolly toward the muzzle during the standoff
+let hush = false; // dead silence right before the hammer falls
+let drone, droneGain;
 const vigEl = $( 'vig' );
 
-function tension() { return state === 'dead' ? 0 : ( 1 / ( CHAMBERS - pulls ) ) * ( 0.7 + 0.5 * aim ); }
+function tension() { return state === 'dead' ? 0 : Math.pow( 1 / ( CHAMBERS - pulls ), 0.8 ) * ( 0.55 + 0.6 * aim ); }
 
 // heartbeat: faster and louder the closer to the bullet you get
 ( function heartbeat() {
@@ -495,7 +500,7 @@ function tension() { return state === 'dead' ? 0 : ( 1 / ( CHAMBERS - pulls ) ) 
 
 		vigEl.classList.add( 'beat' );
 		setTimeout( () => vigEl.classList.remove( 'beat' ), 120 );
-		if ( actx && actx.state === 'running' ) sfx.heart( 0.25 + t * 0.9 );
+		if ( actx && actx.state === 'running' && ! hush ) sfx.heart( 0.25 + t * 0.9 );
 
 	}
 	setTimeout( heartbeat, 1250 - 750 * Math.min( t, 1 ) );
@@ -577,8 +582,26 @@ async function pull() {
 	await wait( 0.5 );
 	sfx.cock();
 	await tween( 0.35, t => { hammer.rotation.z = 0.7 * t; trigger.rotation.z = - 0.35 * t; }, ease.out );
-	await wait( 0.9 + Math.random() * 1.1 ); // suspense, heartbeat speeds up
-	await tween( 0.05, t => { hammer.rotation.z = 0.7 * ( 1 - t ); }, ease.lin );
+
+	// the standoff: the trigger is squeezed slowly, the camera creeps in, and the longer you survive the longer it drags on
+	const risk = 1 / ( CHAMBERS - pulls );
+	const dur = 1.6 + risk * 3.2 + Math.random() * 1.2;
+	setMsg( risk > 0.45 ? '숨을 멈추세요…' : '방아쇠가 천천히 당겨집니다…' );
+	let creaked = 0;
+	await tween( dur, t => {
+
+		push = t;
+		trigger.rotation.z = - 0.35 - 0.3 * t;
+		hammer.rotation.z = 0.7 + 0.04 * t;
+		if ( t > creaked + 0.33 ) { creaked += 0.33; sfx.creak(); }
+
+	}, ease.inOut );
+	hush = true; // silence
+	if ( bus ) bus.gain.setTargetAtTime( 0.05, actx.currentTime, 0.05 );
+	await wait( 0.35 + risk * 0.5 );
+	if ( bus ) bus.gain.setTargetAtTime( 1, actx.currentTime, 0.02 );
+	hush = false;
+	await tween( 0.05, t => { hammer.rotation.z = 0.74 * ( 1 - t ); }, ease.lin );
 
 	if ( cur === bullet ) {
 
@@ -591,8 +614,10 @@ async function pull() {
 	shake = 0.06;
 	score ++; pulls ++;
 	setMsg( '찰칵… 살아남았습니다.' );
+	sfx.exhale();
 	await wait( 0.7 );
 	setAim( 0, 0.9 );
+	tween( 0.9, t => { push = 1 - t; } );
 	await tween( 0.2, t => { trigger.rotation.z = - 0.35 * ( 1 - t ); }, ease.out );
 
 	cur = ( cur + 1 ) % CHAMBERS;
@@ -602,7 +627,7 @@ async function pull() {
 	sfx.tick();
 	await wait( 0.5 );
 
-	setMsg( '다음은…?' );
+	setMsg( pulls >= 4 ? '이제 남은 칸이 거의 없습니다…' : pulls >= 2 ? '점점 확률이 높아집니다…' : '다음은…?' );
 	state = 'idle'; updateUI();
 
 }
@@ -614,7 +639,7 @@ async function bang() {
 	rounds.forEach( ( r, i ) => r.visible = i === bullet );
 	flashSprite.visible = true;
 	burst(); smoking = true;
-	recoil = 1; shake = 0.6;
+	recoil = 1; shake = 0.6; push = 0;
 	setMsg( '' );
 	flashEl.style.background = '#fff';
 	flashEl.style.opacity = '1';
@@ -713,8 +738,21 @@ renderer.setAnimationLoop( () => {
 
 	cyl.rotation.x = rot;
 
+	const T = tension();
+	if ( actx && ! drone ) { // low drone that swells with the odds
+		drone = [ 55, 55.7, 82.4 ].map( f => { const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; return o; } );
+		droneGain = actx.createGain(); droneGain.gain.value = 0;
+		const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220;
+		drone.forEach( o => { o.connect( lp ); o.start(); } ); lp.connect( droneGain ).connect( bus );
+	}
+	if ( droneGain ) droneGain.gain.setTargetAtTime( state === 'dead' || hush ? 0 : 0.015 + T * 0.09, actx.currentTime, 0.4 );
+	// lights sag and flicker as the risk climbs
+	spot.intensity = 320 * ( 1 - 0.3 * T ) * ( 1 + ( Math.random() - 0.5 ) * 0.35 * T * T );
+
 	recoil *= Math.pow( 0.002, dt );
-	gun.rotation.z = recoil * 0.45;
+	const tr = T * T * 0.012; // hand tremor
+	gun.rotation.z = recoil * 0.45 + ( Math.random() - 0.5 ) * tr;
+	gun.rotation.y = ( Math.random() - 0.5 ) * tr;
 	gun.position.x = - 0.4 - recoil * 0.5;
 	gun.position.y = Math.sin( time * 1.2 ) * 0.03 * ( 1 - aim * 0.5 );
 
@@ -723,13 +761,14 @@ renderer.setAnimationLoop( () => {
 	const tremble = 0.004 * tension() * 4;
 	const e = aim * aim * ( 3 - 2 * aim );
 	tmpPos.set( camBase.x + mouse.x * 0.6 * ( 1 - e ), camBase.y - mouse.y * 0.4 * ( 1 - e ), camBase.z ).lerp( barrelCam, e );
+	tmpPos.x -= push * 1.0 * e; tmpPos.y -= push * 0.15 * e;
 	tmpPos.x += ( Math.random() - 0.5 ) * ( shake + tremble ) + Math.sin( time * 0.8 ) * 0.03;
 	tmpPos.y += ( Math.random() - 0.5 ) * ( shake + tremble ) + Math.sin( time * 1.1 ) * 0.03;
 	tmpPos.z += ( Math.random() - 0.5 ) * ( shake + tremble );
 	camera.position.copy( tmpPos );
 	tmpTarget.copy( camTarget ).lerp( barrelTarget, e );
 	camera.lookAt( tmpTarget );
-	const fov = 40 - 8 * e;
+	const fov = 40 - 8 * e - 6 * push * e;
 	if ( camera.fov !== fov ) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
 	composer.render();
