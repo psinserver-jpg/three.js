@@ -13,7 +13,8 @@ namespace NexusStrike
         static readonly Dictionary<string, AudioClip> clips = new Dictionary<string, AudioClip>();
         static AudioSource[] pool;
         static int poolIndex;
-        static AudioSource ui;
+        static AudioSource[] ui;
+        static int uiIndex;
         public static float masterVolume = 0.7f;
 
         public static void Init(Transform owner)
@@ -35,9 +36,13 @@ namespace NexusStrike
                 s.dopplerLevel = 0f;
                 pool[i] = s;
             }
-            ui = host.AddComponent<AudioSource>();
-            ui.playOnAwake = false;
-            ui.spatialBlend = 0f;
+            ui = new AudioSource[8];
+            for (int i = 0; i < ui.Length; i++)
+            {
+                ui[i] = host.AddComponent<AudioSource>();
+                ui[i].playOnAwake = false;
+                ui[i].spatialBlend = 0f;
+            }
             Build();
         }
 
@@ -58,8 +63,12 @@ namespace NexusStrike
         {
             AudioClip c;
             if (ui == null || !clips.TryGetValue(id, out c)) return;
-            ui.pitch = pitch;
-            ui.PlayOneShot(c, volume * masterVolume);
+            var s = ui[uiIndex];
+            uiIndex = (uiIndex + 1) % ui.Length;
+            s.pitch = pitch;
+            s.volume = volume * masterVolume;
+            s.clip = c;
+            s.Play();
         }
 
         /// <summary>Plays 2D for the local player, 3D for everybody else.</summary>

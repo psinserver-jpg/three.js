@@ -132,12 +132,14 @@ namespace NexusStrike
         public virtual void OnStunned() { }
         public virtual void OnDeath()
         {
+            if (weapon != null) weapon.gameObject.SetActive(false);
             ultActive = false;
             reloading = false;
             zoomFov = 0f;
         }
         public virtual void OnRespawn()
         {
+            if (weapon != null) weapon.gameObject.SetActive(true);
             ammo = maxAmmo;
             reloading = false;
             if (ab1 != null) ab1.remaining = 0f;

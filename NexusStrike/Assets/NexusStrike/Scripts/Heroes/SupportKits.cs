@@ -58,6 +58,11 @@ namespace NexusStrike
             return best;
         }
 
+        protected override void OnTick(HeroInput input, float dt, bool stunned)
+        {
+            if (stunned) beamTarget = null;
+        }
+
         protected override void HandleFire(HeroInput input, float dt)
         {
             if (input.primary)

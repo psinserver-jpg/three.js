@@ -460,7 +460,7 @@ namespace NexusStrike
                 Color hc = kill ? new Color(1f, 0.2f, 0.2f) : hitHead ? new Color(1f, 0.85f, 0.2f) : Color.white;
                 float len = kill ? 16f : 11f;
                 var m = GUI.matrix;
-                GUIUtility.RotateAroundPivot(45f, c);
+                GUIUtility.RotateAroundPivot(45f, c * scale);
                 Fill(new Rect(c.x - 2, c.y - 12 - len, 4, len), hc);
                 Fill(new Rect(c.x - 2, c.y + 12, 4, len), hc);
                 Fill(new Rect(c.x - 12 - len, c.y - 2, len, 4), hc);
@@ -739,7 +739,7 @@ namespace NexusStrike
                 float worldAng = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
                 float rel = Mathf.DeltaAngle(p.yaw, worldAng);
                 var m = GUI.matrix;
-                GUIUtility.RotateAroundPivot(rel, c);
+                GUIUtility.RotateAroundPivot(rel, c * scale);
                 Fill(new Rect(c.x - 50, c.y - 170, 100, 10), new Color(1f, 0.15f, 0.1f, 0.85f * (1f - age / 1.2f)));
                 GUI.matrix = m;
             }

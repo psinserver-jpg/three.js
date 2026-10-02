@@ -178,7 +178,7 @@ namespace NexusStrike
             // stuck detection
             if (wish.sqrMagnitude > 0.2f && self.motor.grounded)
             {
-                if ((self.Feet - lastPos).sqrMagnitude < 0.04f * dt * 60f) stuckTimer += dt;
+                if (Flat(self.Feet - lastPos).magnitude < self.def.speed * 0.25f * dt) stuckTimer += dt;
                 else stuckTimer = Mathf.Max(0f, stuckTimer - dt);
                 if (stuckTimer > 0.6f)
                 {
@@ -313,7 +313,7 @@ namespace NexusStrike
                 switch (self.def.role)
                 {
                     case HeroRole.Tank: anchor = pl.Position + fwd * 4f; break;
-                    case HeroRole.Damage: anchor = pl.Position + fwd * 3f + right * lateral * 1.6f; break;
+                    case HeroRole.Damage: anchor = pl.Position + fwd * 2f + right * lateral * 0.6f; break;
                     default: anchor = pl.Position - fwd * 3f + right * lateral; break;
                 }
             }

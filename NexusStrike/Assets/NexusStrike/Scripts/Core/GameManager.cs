@@ -85,7 +85,8 @@ namespace NexusStrike
             map = MapBuilder.Build();
             Physics.SyncTransforms();
             nav = NavGraph.Build(map.bounds);
-            StaticBatchingUtility.Combine(map.root.gameObject);
+            foreach (Transform child in map.root)
+                if (child.name == "Geometry" || child.name == "Decor") StaticBatchingUtility.Combine(child.gameObject);
             Debug.Log("[NexusStrike] Map built. Nav nodes: " + nav.nodes.Count);
 
             var pgo = new GameObject("Payload");
@@ -450,6 +451,8 @@ namespace NexusStrike
         void OnCheckpoint(int index)
         {
             timeLeft += CheckpointBonus;
+            overtime = false;
+            overtimeGrace = 3f;
             Announce("CHECKPOINT REACHED  +" + Mathf.RoundToInt(CheckpointBonus) + "s", new Color(1f, 0.85f, 0.3f), 3f);
             Sfx.Play2D("announce", 1f);
             if (index == 0 && payload.checkpoints.Length > 1)
