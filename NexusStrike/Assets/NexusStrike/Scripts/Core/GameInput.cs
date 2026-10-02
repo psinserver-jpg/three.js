@@ -8,7 +8,7 @@ namespace NexusStrike
 {
     public enum GKey
     {
-        W, A, S, D, Space, LeftShift, E, Q, R, H, Tab, Escape, Enter, F1,
+        W, A, S, D, Space, LeftShift, E, Q, R, H, Tab, Escape, Enter, F1, F2, F3, F4,
         Alpha1, Alpha2, Alpha3, Alpha4, Alpha5, Alpha6, Alpha7, Alpha8
     }
 
@@ -37,6 +37,9 @@ namespace NexusStrike
                 case GKey.Escape: return IKey.Escape;
                 case GKey.Enter: return IKey.Enter;
                 case GKey.F1: return IKey.F1;
+                case GKey.F2: return IKey.F2;
+                case GKey.F3: return IKey.F3;
+                case GKey.F4: return IKey.F4;
                 case GKey.Alpha1: return IKey.Digit1;
                 case GKey.Alpha2: return IKey.Digit2;
                 case GKey.Alpha3: return IKey.Digit3;
@@ -102,6 +105,9 @@ namespace NexusStrike
                 case GKey.Escape: return KeyCode.Escape;
                 case GKey.Enter: return KeyCode.Return;
                 case GKey.F1: return KeyCode.F1;
+                case GKey.F2: return KeyCode.F2;
+                case GKey.F3: return KeyCode.F3;
+                case GKey.F4: return KeyCode.F4;
                 case GKey.Alpha1: return KeyCode.Alpha1;
                 case GKey.Alpha2: return KeyCode.Alpha2;
                 case GKey.Alpha3: return KeyCode.Alpha3;

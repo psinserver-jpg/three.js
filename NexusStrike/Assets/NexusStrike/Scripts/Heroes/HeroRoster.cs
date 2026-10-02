@@ -30,6 +30,22 @@ namespace NexusStrike
     {
         public static readonly List<HeroDefinition> All = new List<HeroDefinition>();
 
+        /// <summary>Training range robots (not selectable).</summary>
+        public static readonly HeroDefinition TrainingBot = new HeroDefinition
+        {
+            id = "trainbot", name = "TRAINING BOT", title = "Target", role = HeroRole.Damage,
+            description = "Training range robot.", health = 200, armor = 0, shield = 0, speed = 4.5f, ultCost = 99999f,
+            color = new Color(0.29f, 0.33f, 0.41f), kitType = typeof(TrainingBotKit), abilities = new AbilityText[0]
+        };
+
+        public static readonly HeroDefinition HeavyTrainingBot = new HeroDefinition
+        {
+            id = "trainbot_heavy", name = "HEAVY BOT", title = "Armored Target", role = HeroRole.Tank,
+            description = "Armored training range robot.", health = 350, armor = 250, shield = 0, speed = 4f,
+            radius = 0.55f, height = 2.15f, ultCost = 99999f,
+            color = new Color(0.22f, 0.25f, 0.32f), kitType = typeof(TrainingBotKit), abilities = new AbilityText[0]
+        };
+
         static HeroRoster()
         {
             All.Add(new HeroDefinition

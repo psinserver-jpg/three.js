@@ -30,6 +30,12 @@ namespace NexusStrike
         public MatchState state = MatchState.MainMenu;
         public Team playerTeam = Team.Attack;
         public Difficulty difficulty = Difficulty.Normal;
+        public GameMode mode = GameMode.Escort;
+        public TrainingRange training;
+        public bool infiniteUlt;
+        public bool noCooldowns;
+        readonly List<Vector2> recentPlayerDamage = new List<Vector2>();
+        public float totalTrainingDamage;
 
         public Camera cam;
         public MapData map;
@@ -69,8 +75,26 @@ namespace NexusStrike
         public bool InMatch { get { return state == MatchState.Setup || state == MatchState.Playing; } }
         public bool InputBlocked { get { return paused || heroPickerOpen || !InMatch; } }
 
+        public bool Training { get { return mode == GameMode.Training; } }
+
+        /// <summary>Player damage per second over the last 5 seconds (training range readout).</summary>
+        public float RecentDps
+        {
+            get
+            {
+                float sum = 0f;
+                for (int i = recentPlayerDamage.Count - 1; i >= 0; i--)
+                {
+                    if (Time.time - recentPlayerDamage[i].x > 5f) { recentPlayerDamage.RemoveAt(i); continue; }
+                    sum += recentPlayerDamage[i].y;
+                }
+                return sum / 5f;
+            }
+        }
+
         public SpawnRoom ActiveSpawn(Team t)
         {
+            if (Training) return training.spawn;
             int phase = Mathf.Clamp(payload.checkpointsReached, 0, 2);
             return t == Team.Attack ? map.attackSpawns[phase] : map.defendSpawns[phase];
         }
@@ -89,6 +113,9 @@ namespace NexusStrike
             foreach (Transform child in map.root)
                 if (child.name == "Geometry" || child.name == "Decor") StaticBatchingUtility.Combine(child.gameObject);
             Debug.Log("[NexusStrike] Map built. Nav nodes: " + nav.nodes.Count);
+
+            training = TrainingRangeBuilder.Build();
+            StaticBatchingUtility.Combine(training.root.gameObject);
 
             var pgo = new GameObject("Payload");
             payload = pgo.AddComponent<Payload>();
@@ -209,6 +236,7 @@ namespace NexusStrike
 
         public void StartMatch(string heroId)
         {
+            if (Training) { StartTraining(heroId); return; }
             ClearMatch();
             lastHeroId = heroId;
             payload.ResetState();
@@ -293,7 +321,80 @@ namespace NexusStrike
             pendingHeroId = null;
         }
 
-        Combatant SpawnHero(HeroDefinition def, Team team, bool isPlayer, string name, int slot, SpawnRoom room)
+        void StartTraining(string heroId)
+        {
+            ClearMatch();
+            lastHeroId = heroId;
+            playerTeam = Team.Attack;
+            foreach (var hp in training.healthPacks) hp.ResetState();
+            recentPlayerDamage.Clear();
+            totalTrainingDamage = 0f;
+            player = SpawnHero(HeroRoster.Get(heroId), Team.Attack, true, "YOU", 0, training.spawn);
+            int slot = 1;
+            foreach (var spot in training.spots)
+                SpawnHero(spot.def, spot.team, false, spot.label, slot++, null, spot);
+            state = MatchState.Playing;
+            heroPickerOpen = false;
+            SetPaused(false);
+            Announce("NEXUS TRAINING RANGE", new Color(0.35f, 0.85f, 1f), 3f);
+            Sfx.Play2D("announce", 0.8f);
+        }
+
+        void TickTraining(float dt)
+        {
+            if (GameInput.KeyDown(GKey.H) && player != null) heroPickerOpen = !heroPickerOpen;
+            if (GameInput.KeyDown(GKey.F2)) { infiniteUlt = !infiniteUlt; Announce("INFINITE ULTIMATE " + (infiniteUlt ? "ON" : "OFF"), Color.white, 1.5f); }
+            if (GameInput.KeyDown(GKey.F3)) { noCooldowns = !noCooldowns; Announce("NO COOLDOWNS " + (noCooldowns ? "ON" : "OFF"), Color.white, 1.5f); }
+            if (GameInput.KeyDown(GKey.F4)) ResetTrainingBots();
+
+            if (player != null && player.alive)
+            {
+                if (infiniteUlt && !player.kit.ultActive) player.ultCharge = player.def.ultCost;
+                if (noCooldowns)
+                {
+                    var k = player.kit;
+                    if (k.ab1 != null) k.ab1.remaining = 0f;
+                    if (k.ab2 != null) k.ab2.remaining = 0f;
+                    if (k.secondaryAbility != null) k.secondaryAbility.remaining = 0f;
+                }
+                if (training.spawn.Contains(player.Feet)) player.ApplyHeal(null, 200f * dt);
+            }
+
+            for (int i = Combatant.All.Count - 1; i >= 0; i--)
+            {
+                var c = Combatant.All[i];
+                if (c.alive || Time.time < c.respawnAt) continue;
+                if (c == player)
+                {
+                    if (pendingHeroId != null)
+                    {
+                        string id = pendingHeroId;
+                        pendingHeroId = null;
+                        SwapPlayerHero(id, training.spawn.RandomPoint(), training.spawn.yaw);
+                    }
+                    else c.Respawn(training.spawn.RandomPoint(), training.spawn.yaw);
+                    continue;
+                }
+                var tb = c.brain as TrainingBotBrain;
+                if (tb != null) c.Respawn(tb.anchor, tb.homeYaw);
+            }
+        }
+
+        public void ResetTrainingBots()
+        {
+            foreach (var c in Combatant.All)
+            {
+                var tb = c.brain as TrainingBotBrain;
+                if (tb == null) continue;
+                if (c.alive) c.Respawn(tb.anchor, tb.homeYaw);
+                else c.respawnAt = Time.time;
+            }
+            totalTrainingDamage = 0f;
+            recentPlayerDamage.Clear();
+            Announce("RANGE RESET", Color.white, 1.5f);
+        }
+
+        Combatant SpawnHero(HeroDefinition def, Team team, bool isPlayer, string name, int slot, SpawnRoom room, TrainingSpot spot = null)
         {
             var go = new GameObject((isPlayer ? "Player_" : "Bot_") + def.name + "_" + team);
             go.layer = Layers.Characters;
@@ -329,6 +430,22 @@ namespace NexusStrike
                 pb.self = c;
                 c.brain = pb;
                 pb.Bind(cam);
+            }
+            else if (spot != null)
+            {
+                var tb = go.AddComponent<TrainingBotBrain>();
+                tb.self = c;
+                tb.mode = spot.mode;
+                tb.anchor = spot.position;
+                tb.pointB = spot.pointB;
+                tb.homeYaw = spot.yaw;
+                tb.speedScale = spot.speedScale;
+                tb.jumpy = spot.jumpy;
+                tb.aggroCenter = spot.aggroCenter;
+                c.brain = tb;
+                c.Respawn(spot.position, spot.yaw);
+                c.deaths = 0;
+                return c;
             }
             else
             {
@@ -382,7 +499,7 @@ namespace NexusStrike
             get
             {
                 if (player == null || !InMatch) return false;
-                if (!player.alive) return true;
+                if (!player.alive || Training) return true;
                 return ActiveSpawn(playerTeam).Contains(player.Feet) || state == MatchState.Setup;
             }
         }
@@ -391,6 +508,7 @@ namespace NexusStrike
 
         void TickMatch(float dt)
         {
+            if (Training) { TickTraining(dt); return; }
             if (state == MatchState.Setup && Time.time >= setupEnd)
             {
                 state = MatchState.Playing;
@@ -494,6 +612,12 @@ namespace NexusStrike
             if (amount <= 0f) return;
             if (attacker != null && attacker == player && victim != player)
             {
+                if (Training)
+                {
+                    recentPlayerDamage.Add(new Vector2(Time.time, amount));
+                    totalTrainingDamage += amount;
+                    hud.OnDamageNumber(victim, amount, headshot);
+                }
                 hud.OnHit(headshot);
                 Sfx.Play2D(headshot ? "headshot" : "hit", headshot ? 0.7f : 0.35f);
             }
@@ -507,7 +631,7 @@ namespace NexusStrike
 
         public void OnKill(Combatant killer, Combatant victim, string source, List<Combatant> assisters)
         {
-            victim.respawnAt = Time.time + RespawnTime;
+            victim.respawnAt = Time.time + (Training ? (victim.isPlayer ? 3f : 2.5f) : RespawnTime);
             if (killer != null && killer != victim)
             {
                 killer.kills++;

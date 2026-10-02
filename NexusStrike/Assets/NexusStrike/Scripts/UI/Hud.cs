@@ -38,7 +38,30 @@ namespace NexusStrike
 
         // ------------------------------------------------------------------ events from GameManager
 
+        class DamageNumber { public Vector3 pos; public float amount; public bool head; public float time; public Combatant victim; }
+        readonly List<DamageNumber> damageNumbers = new List<DamageNumber>();
+
         public void OnHit(bool head) { hitTime = Time.unscaledTime; hitHead = head; }
+
+        /// <summary>Floating damage number (training range). Rapid hits on the same target merge.</summary>
+        public void OnDamageNumber(Combatant victim, float amount, bool head)
+        {
+            foreach (var d in damageNumbers)
+            {
+                if (d.victim == victim && Time.unscaledTime - d.time < 0.15f && d.head == head)
+                {
+                    d.amount += amount;
+                    d.time = Time.unscaledTime;
+                    return;
+                }
+            }
+            damageNumbers.Add(new DamageNumber
+            {
+                pos = victim.HeadPos + Vector3.up * 0.4f + Random.insideUnitSphere * 0.25f,
+                amount = amount, head = head, time = Time.unscaledTime, victim = victim
+            });
+            if (damageNumbers.Count > 40) damageNumbers.RemoveAt(0);
+        }
 
         public void OnKill(Combatant victim)
         {
@@ -194,7 +217,7 @@ namespace NexusStrike
                 case MatchState.Playing:
                     DrawGameHud();
                     if (GM.heroPickerOpen) DrawHeroSelect(true);
-                    else if (GameInput.Key(GKey.Tab)) DrawScoreboard();
+                    else if (GameInput.Key(GKey.Tab) && !GM.Training) DrawScoreboard();
                     if (GM.paused) DrawPause();
                     break;
                 case MatchState.Ended:
@@ -224,8 +247,16 @@ namespace NexusStrike
                 if (Button(new Rect(cx - 260 + i * 177, y + 45, 165, 56), diffs[i], (int)GM.difficulty == i, 22)) GM.difficulty = (Difficulty)i;
 
             y += 150;
-            if (Button(new Rect(cx - 200, y, 400, 80), "PLAY", false, 40, new Color(1f, 0.75f, 0.25f)) || KeyEvent(KeyCode.Return))
+            if (Button(new Rect(cx - 410, y, 400, 80), "ESCORT MATCH", false, 34, new Color(1f, 0.75f, 0.25f)) || KeyEvent(KeyCode.Return))
+            {
+                GM.mode = GameMode.Escort;
                 GM.GoToHeroSelect();
+            }
+            if (Button(new Rect(cx + 10, y, 400, 80), "TRAINING RANGE", false, 34, new Color(0.35f, 0.85f, 1f)))
+            {
+                GM.mode = GameMode.Training;
+                GM.GoToHeroSelect();
+            }
 
             DrawControls(new Rect(cx - 330, y + 120, 660, 220));
         }
@@ -249,7 +280,8 @@ namespace NexusStrike
         {
             Fill(new Rect(0, 0, VW, VH), new Color(0.02f, 0.03f, 0.06f, inGame ? 0.8f : 0.6f));
             Text(new Rect(0, 40, VW, 70), inGame ? "CHANGE HERO" : "CHOOSE YOUR HERO", 56, Color.white);
-            Text(new Rect(0, 108, VW, 36), (GM.playerTeam == Team.Attack ? "ATTACK" : "DEFENSE") + "  ·  " + GM.map.name + "  ·  1 TANK / 2 DAMAGE / 2 SUPPORT", 22,
+            Text(new Rect(0, 108, VW, 36), GM.Training ? "NEXUS TRAINING RANGE  ·  SWAP HEROES ANY TIME WITH [H]" :
+                (GM.playerTeam == Team.Attack ? "ATTACK" : "DEFENSE") + "  ·  " + GM.map.name + "  ·  1 TANK / 2 DAMAGE / 2 SUPPORT", 22,
                 TeamColors.Ally);
 
             var heroes = HeroRoster.All;
@@ -385,8 +417,17 @@ namespace NexusStrike
 
             DrawWorldMarkers(p);
             DrawDamageIndicators(p);
-            DrawObjective();
-            DrawTeamBars();
+            if (GM.Training)
+            {
+                DrawSigns(p);
+                DrawDamageNumbers();
+                DrawTrainingPanel(p);
+            }
+            else
+            {
+                DrawObjective();
+                DrawTeamBars();
+            }
             DrawKillFeed();
             DrawAnnouncements();
             DrawCallouts();
@@ -406,7 +447,7 @@ namespace NexusStrike
                 DrawWeapon(p);
                 DrawAbilities(p);
                 DrawStatus(p);
-                if (GM.PlayerCanChangeHero && !GM.heroPickerOpen)
+                if (GM.PlayerCanChangeHero && !GM.heroPickerOpen && !GM.Training)
                     Text(new Rect(VW / 2 - 300, VH - 250, 600, 30), "PRESS [H] TO CHANGE HERO", 18, new Color(1, 1, 1, 0.7f));
             }
             else
@@ -703,17 +744,20 @@ namespace NexusStrike
         void DrawWorldMarkers(Combatant p)
         {
             var cam = GM.cam;
-            // payload marker
-            Vector3 pw = GM.payload.Position + Vector3.up * 3.2f;
             Vector2 g;
-            bool front = WorldToGui(pw, out g);
-            if (!front) { g.x = VW - g.x; g.y = VH - 40; }
-            g.x = Mathf.Clamp(g.x, 40, VW - 40);
-            g.y = Mathf.Clamp(g.y, 140, VH - 200);
-            Color pc = GM.payload.Contested ? new Color(1f, 0.6f, 0.2f) : GM.payload.Moving ? (GM.playerTeam == Team.Attack ? TeamColors.Ally : TeamColors.Enemy) : Color.white;
-            Tex(new Rect(g.x - 16, g.y - 16, 32, 32), ring, pc);
-            Tex(new Rect(g.x - 7, g.y - 7, 14, 14), disc, pc);
-            Text(new Rect(g.x - 60, g.y + 16, 120, 22), Mathf.RoundToInt(Vector3.Distance(p.Feet, GM.payload.Position)) + "m", 15, pc);
+            if (!GM.Training)
+            {
+                // payload marker
+                Vector3 pw = GM.payload.Position + Vector3.up * 3.2f;
+                bool front = WorldToGui(pw, out g);
+                if (!front) { g.x = VW - g.x; g.y = VH - 40; }
+                g.x = Mathf.Clamp(g.x, 40, VW - 40);
+                g.y = Mathf.Clamp(g.y, 140, VH - 200);
+                Color pc = GM.payload.Contested ? new Color(1f, 0.6f, 0.2f) : GM.payload.Moving ? (GM.playerTeam == Team.Attack ? TeamColors.Ally : TeamColors.Enemy) : Color.white;
+                Tex(new Rect(g.x - 16, g.y - 16, 32, 32), ring, pc);
+                Tex(new Rect(g.x - 7, g.y - 7, 14, 14), disc, pc);
+                Text(new Rect(g.x - 60, g.y + 16, 120, 22), Mathf.RoundToInt(Vector3.Distance(p.Feet, GM.payload.Position)) + "m", 15, pc);
+            }
 
             Vector3 eye = cam.transform.position;
             foreach (var c in Combatant.All)
@@ -724,7 +768,7 @@ namespace NexusStrike
                 bool ally = c.team == p.team;
                 if (!ally)
                 {
-                    if (dist > 45f) continue;
+                    if (dist > (GM.Training ? 120f : 45f)) continue;
                     if (!CombatUtil.LineOfSight(eye, c.ChestPos) && !CombatUtil.LineOfSight(eye, c.HeadPos)) continue;
                 }
                 if (!WorldToGui(head, out g)) continue;
@@ -754,6 +798,67 @@ namespace NexusStrike
                 GUIUtility.RotateAroundPivot(rel, c * scale);
                 Fill(new Rect(c.x - 50, c.y - 170, 100, 10), new Color(1f, 0.15f, 0.1f, 0.85f * (1f - age / 1.2f)));
                 GUI.matrix = m;
+            }
+        }
+
+        // ------------------------------------------------------------------ training range
+
+        void DrawTrainingPanel(Combatant p)
+        {
+            var r = new Rect(30, 30, 380, 300);
+            Fill(r, new Color(0.03f, 0.06f, 0.1f, 0.7f));
+            Fill(new Rect(r.x, r.y, r.width, 5), new Color(0.35f, 0.85f, 1f));
+            Text(new Rect(r.x + 16, r.y + 12, 360, 34), "TRAINING RANGE", 26, Color.white, TextAnchor.MiddleLeft);
+            Text(new Rect(r.x + 16, r.y + 52, 200, 30), "DPS (5s)", 18, new Color(1, 1, 1, 0.6f), TextAnchor.MiddleLeft, false);
+            Text(new Rect(r.x + 160, r.y + 48, 200, 36), Mathf.RoundToInt(GM.RecentDps).ToString(), 30, new Color(1f, 0.82f, 0.35f), TextAnchor.MiddleRight);
+            Text(new Rect(r.x + 16, r.y + 86, 200, 26), "DAMAGE DEALT", 16, new Color(1, 1, 1, 0.6f), TextAnchor.MiddleLeft, false);
+            Text(new Rect(r.x + 160, r.y + 86, 200, 26), Mathf.RoundToInt(GM.totalTrainingDamage).ToString(), 20, Color.white, TextAnchor.MiddleRight);
+            Text(new Rect(r.x + 16, r.y + 112, 200, 26), "HEALING DONE", 16, new Color(1, 1, 1, 0.6f), TextAnchor.MiddleLeft, false);
+            Text(new Rect(r.x + 160, r.y + 112, 200, 26), Mathf.RoundToInt(p.healingDone).ToString(), 20, new Color(0.5f, 1f, 0.55f), TextAnchor.MiddleRight);
+            Fill(new Rect(r.x + 16, r.y + 146, r.width - 32, 1), new Color(1, 1, 1, 0.2f));
+            string[] keys = { "H", "F2", "F3", "F4" };
+            string[] labels = { "Change hero", "Infinite ultimate", "No cooldowns", "Reset range" };
+            bool[] states = { false, GM.infiniteUlt, GM.noCooldowns, false };
+            for (int i = 0; i < keys.Length; i++)
+            {
+                float y = r.y + 156 + i * 34;
+                Fill(new Rect(r.x + 16, y + 3, 44, 26), new Color(1, 1, 1, 0.12f));
+                Text(new Rect(r.x + 16, y + 3, 44, 26), keys[i], 15, new Color(1f, 0.8f, 0.35f));
+                Text(new Rect(r.x + 72, y, 220, 32), labels[i], 18, Color.white, TextAnchor.MiddleLeft, false);
+                if (i == 1 || i == 2)
+                    Text(new Rect(r.x + 260, y, 100, 32), states[i] ? "ON" : "OFF", 18, states[i] ? new Color(0.5f, 1f, 0.55f) : new Color(1, 1, 1, 0.4f), TextAnchor.MiddleRight);
+            }
+        }
+
+        void DrawSigns(Combatant p)
+        {
+            Vector3 eye = GM.cam.transform.position;
+            foreach (var s in GM.training.signs)
+            {
+                float d = Vector3.Distance(eye, s.position);
+                if (d > 90f) continue;
+                Vector2 g;
+                if (!WorldToGui(s.position, out g)) continue;
+                if (!CombatUtil.LineOfSight(eye, s.position)) continue;
+                int size = (int)Mathf.Lerp(26f, 13f, Mathf.Clamp01(d / 70f));
+                float a = Mathf.Clamp01((90f - d) / 20f);
+                Text(new Rect(g.x - 300, g.y - 20, 600, 40), s.text, size, new Color(s.color.r, s.color.g, s.color.b, a));
+            }
+        }
+
+        void DrawDamageNumbers()
+        {
+            for (int i = damageNumbers.Count - 1; i >= 0; i--)
+            {
+                var d = damageNumbers[i];
+                float age = Time.unscaledTime - d.time;
+                if (age > 1f) { damageNumbers.RemoveAt(i); continue; }
+                Vector2 g;
+                if (!WorldToGui(d.pos + Vector3.up * age * 0.8f, out g)) continue;
+                float a = Mathf.Clamp01((1f - age) * 2f);
+                int size = d.head ? 30 : 24;
+                Color c = d.head ? new Color(1f, 0.3f, 0.25f, a) : new Color(1f, 1f, 1f, a);
+                Text(new Rect(g.x - 80, g.y - 20, 160, 40), Mathf.Max(1, Mathf.RoundToInt(d.amount)).ToString(), size, c);
             }
         }
 

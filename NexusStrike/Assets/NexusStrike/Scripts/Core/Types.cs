@@ -10,6 +10,8 @@ namespace NexusStrike
 
     public enum Difficulty { Easy, Normal, Hard }
 
+    public enum GameMode { Escort, Training }
+
     public enum CrosshairStyle { Dot, Cross, Circle, Wide }
 
     /// <summary>Per-frame intent produced by a brain (player or bot) and consumed by motor + kit.</summary>

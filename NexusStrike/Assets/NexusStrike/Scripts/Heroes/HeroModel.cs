@@ -89,6 +89,7 @@ namespace NexusStrike
             {
                 case "ironclad": Skel_ironclad(); break;
                 case "titan": Skel_titan(); break;
+                case "trainbot_heavy": Skel_ironclad(); break;
             }
             ApplyPose();
             Build_base();
@@ -101,6 +102,8 @@ namespace NexusStrike
                 case "rook": Build_rook(); break;
                 case "lumen": Build_lumen(); break;
                 case "cypress": Build_cypress(); break;
+                case "trainbot": Build_trainbot(); break;
+                case "trainbot_heavy": Build_trainbot(); break;
             }
             for (int i = 0; i < BoneCount; i++)
             {
@@ -185,6 +188,8 @@ namespace NexusStrike
                 case "rook": p = new[] { "E06A2C", "2E2A28", "F2C14E", "9C9590", "5B4A3C", "7FD4FF", "A4704F", "1F1A17" }; break;
                 case "lumen": p = new[] { "26325E", "1A1F33", "E9C46A", "F3EBD6", "32406F", "FFD27A", "EBC6A8", "D9D2C5" }; break;
                 case "cypress": p = new[] { "5E7F3A", "3B2F22", "C9A55A", "E7DCC2", "6B5A3F", "9CFF7A", "7A5236", "2A1E14" }; break;
+                case "trainbot": p = new[] { "4A5568", "1F2430", "F2C14E", "D8DEE6", "353C4A", "FF5A4E", "8A94A6", "1F2430" }; break;
+                case "trainbot_heavy": p = new[] { "3A4252", "171B24", "F2C14E", "C2C9D3", "2A303C", "FF5A4E", "707A8C", "171B24" }; break;
                 default: p = new[] { "888888", "333333", "CCCCCC", "AAAAAA", "555555", "FFFFFF", "D0A080", "222222" }; break;
             }
             var c = new Color[p.Length];
@@ -581,6 +586,38 @@ namespace NexusStrike
             P(B.ShinR, S.Cube, 0f, -0.33f, 0.01f, 0.14f, 0.2f, 0.16f, K.Dark);
             P(B.FootL, S.Cube, 0f, 0f, 0.05f, 0.13f, 0.11f, 0.28f, K.Dark);
             P(B.FootR, S.Cube, 0f, 0f, 0.05f, 0.13f, 0.11f, 0.28f, K.Dark);
+        }
+
+        /// <summary>Training robot: box chassis, yellow bullseye chest plate, visor-slit head, antenna.</summary>
+        void Build_trainbot()
+        {
+            P(B.Chest, S.Cube, 0f, 0.14f, 0f, 0.48f, 0.38f, 0.3f, K.Main);
+            P(B.Chest, S.Cylinder, 0f, 0.15f, 0.16f, 0.3f, 0.012f, 0.3f, K.Accent, 90f, 0f, 0f);
+            P(B.Chest, S.Cylinder, 0f, 0.15f, 0.166f, 0.2f, 0.012f, 0.2f, K.Dark, 90f, 0f, 0f);
+            P(B.Chest, S.Cylinder, 0f, 0.15f, 0.172f, 0.1f, 0.012f, 0.1f, K.Accent, 90f, 0f, 0f);
+            P(B.Chest, S.Cube, -0.3f, 0.28f, 0f, 0.14f, 0.12f, 0.26f, K.Trim);
+            P(B.Chest, S.Cube, 0.3f, 0.28f, 0f, 0.14f, 0.12f, 0.26f, K.Trim);
+            P(B.Chest, S.Cube, 0f, 0.36f, 0f, 0.3f, 0.06f, 0.24f, K.Dark);
+            P(B.Spine, S.Cylinder, 0f, 0.1f, 0f, 0.22f, 0.11f, 0.22f, K.Dark);
+            P(B.Hips, S.Cube, 0f, 0f, 0f, 0.36f, 0.16f, 0.24f, K.Main);
+            P(B.Hips, S.Cube, 0f, 0f, 0.122f, 0.3f, 0.03f, 0.01f, K.Accent);
+            P(B.Head, S.Cube, 0f, 0.1f, 0f, 0.26f, 0.22f, 0.26f, K.Trim);
+            P(B.Head, S.Cube, 0f, 0.11f, 0.131f, 0.2f, 0.04f, 0.01f, K.Glow);
+            P(B.Head, S.Cube, 0f, 0.0f, 0.1f, 0.22f, 0.05f, 0.08f, K.Dark);
+            P(B.Head, S.Cylinder, 0.09f, 0.3f, -0.05f, 0.02f, 0.1f, 0.02f, K.Dark);
+            P(B.Head, S.Sphere, 0.09f, 0.41f, -0.05f, 0.05f, 0.05f, 0.05f, K.Accent);
+            P(B.UpperArmL, S.Cylinder, 0f, -0.13f, 0f, 0.11f, 0.13f, 0.11f, K.Main);
+            P(B.UpperArmR, S.Cylinder, 0f, -0.13f, 0f, 0.11f, 0.13f, 0.11f, K.Main);
+            P(B.ForeArmL, S.Cube, 0f, -0.12f, 0f, 0.12f, 0.22f, 0.12f, K.Trim);
+            P(B.ForeArmR, S.Cube, 0f, -0.12f, 0f, 0.12f, 0.22f, 0.12f, K.Trim);
+            P(B.ThighL, S.Cube, 0f, -0.2f, 0f, 0.15f, 0.36f, 0.16f, K.Main);
+            P(B.ThighR, S.Cube, 0f, -0.2f, 0f, 0.15f, 0.36f, 0.16f, K.Main);
+            P(B.ShinL, S.Sphere, 0f, 0f, 0.02f, 0.13f, 0.13f, 0.13f, K.Accent);
+            P(B.ShinR, S.Sphere, 0f, 0f, 0.02f, 0.13f, 0.13f, 0.13f, K.Accent);
+            P(B.ShinL, S.Cube, 0f, -0.22f, 0f, 0.14f, 0.36f, 0.15f, K.Trim);
+            P(B.ShinR, S.Cube, 0f, -0.22f, 0f, 0.14f, 0.36f, 0.15f, K.Trim);
+            P(B.FootL, S.Cube, 0f, 0f, 0.04f, 0.15f, 0.1f, 0.26f, K.Dark);
+            P(B.FootR, S.Cube, 0f, 0f, 0.04f, 0.15f, 0.1f, 0.26f, K.Dark);
         }
 
         // ------------------------------------------------------------------ runtime
