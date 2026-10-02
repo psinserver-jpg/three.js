@@ -48,6 +48,19 @@
 	.step span { width: 64px; text-align: right; } .step b { width: 32px; font-size: 26px; color: #ffd27a; }
 	.step button { padding: 6px 14px; font-size: 20px; }
 	#custom small { opacity: .7; font-size: 12px; }
+	.bsonly { display: none; }
+	body.bs #bsCtl { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+	body.bs #bsTop { display: block; position: fixed; left: 16px; top: 56px; z-index: 2; font-size: 18px; text-shadow: 0 2px 8px #000; pointer-events: none; }
+	body.bs #classic { display: none; }
+	#bsCtl .row { flex-wrap: wrap; justify-content: center; }
+	#pRow { font-size: 20px; text-shadow: 0 2px 8px #000; } #pRow .x, #bsTop .x { color: #555; }
+	#pHp, #dHp { color: #ff5a4a; letter-spacing: 2px; }
+	#pStatus, #dStatus { font-size: 13px; color: #ffd27a; }
+	button.item { padding: 8px 12px; font-size: 13px; letter-spacing: 0; }
+	button#shootDealer { background: var(--red); border-color: #e0584a; }
+	#dItems { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-width: 340px; }
+	#dItems span { font-size: 12px; padding: 3px 8px; border: 1px solid #5a5248; border-radius: 6px; background: rgba(0,0,0,.45); }
+	.sh { letter-spacing: 3px; }
 	#flash { z-index: 4; position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 	#over { z-index: 5; position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(25, 0, 0, 0.6); text-align: center; }
 	#over.show { display: flex; }
@@ -63,6 +76,7 @@
 </script>
 </head>
 <body>
+<div id="bsTop" class="bsonly"><div>딜러 <span id="dHp"></span> <span id="dStatus"></span></div><div id="dItems"></div></div>
 <div id="hud">
 	<div id="top">
 		<h1>Russian Roulette</h1>
@@ -72,7 +86,12 @@
 		<div id="msg"></div>
 		<div id="shells"></div>
 		<div id="odds"></div>
-		<div class="row">
+		<div id="bsCtl" class="bsonly">
+			<div id="pRow">나 <span id="pHp"></span> <span id="pStatus"></span></div>
+			<div id="pItems" class="row"></div>
+			<div class="row"><button id="shootDealer">딜러에게 발사</button><button id="shootSelf">나에게 발사</button></div>
+		</div>
+		<div class="row" id="classic">
 			<button id="reset">탄창 리셋 (R)</button>
 			<button id="shuffle">순서 교체 (S)</button>
 			<button id="pull">방아쇠 당기기 (Space)</button>
@@ -92,6 +111,7 @@
 		<div class="row">
 			<button id="modeRandom" class="big">랜덤 모드<small>실탄 1~2발 · 위치 랜덤</small></button>
 			<button id="modeCustom" class="big">커스텀 모드<small>실탄/공포탄 직접 설정</small></button>
+			<button id="modeBuck" class="big">벅샷 모드<small>딜러와 대결 · 아이템 · 3라운드</small></button>
 		</div>
 		<div id="custom" style="display:none">
 			<div class="step"><span>실탄</span><button id="liveMinus">−</button><b id="liveVal">2</b><button id="livePlus">+</button></div>
@@ -102,7 +122,7 @@
 	</div>
 </div>
 <div id="over">
-	<h2>BANG!</h2>
+	<h2 id="overTitle">BANG!</h2>
 	<p id="overText"></p>
 	<div class="row"><button id="again" style="pointer-events:auto">다시 하기</button><button id="toMenu" style="pointer-events:auto">모드 변경</button></div>
 </div>
@@ -114,6 +134,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const CHAMBERS = 6;
 const STEP = Math.PI * 2 / CHAMBERS;
@@ -121,7 +142,7 @@ const STEP = Math.PI * 2 / CHAMBERS;
 // ---------- DOM ----------
 const $ = id => document.getElementById( id );
 const msgEl = $( 'msg' ), oddsEl = $( 'odds' ), scoreEl = $( 'score' ), bestEl = $( 'best' );
-const resetBtn = $( 'reset' ), shuffleBtn = $( 'shuffle' ), pullBtn = $( 'pull' ), againBtn = $( 'again' );
+const overTitle = $( 'overTitle' ), resetBtn = $( 'reset' ), shuffleBtn = $( 'shuffle' ), pullBtn = $( 'pull' ), againBtn = $( 'again' );
 const overEl = $( 'over' ), overText = $( 'overText' ), flashEl = $( 'flash' );
 
 let best = 0;
@@ -148,6 +169,23 @@ scene.environmentIntensity = 0.55;
 const camera = new THREE.PerspectiveCamera( 40, innerWidth / innerHeight, 0.1, 50 );
 const camBase = new THREE.Vector3( -4.2, 3.0, 9.2 );
 const camTarget = new THREE.Vector3( 0.9, -0.3, 0 );
+const bottomEl = document.getElementById( 'bottom' );
+const camDir = camBase.clone().sub( camTarget ).normalize();
+
+// pull the camera back (or in) so the whole revolver fits any window shape, from ultra-wide monitors to portrait phones
+function fitView() {
+
+	const t = Math.tan( THREE.MathUtils.degToRad( 40 / 2 ) ); // base vertical fov
+	const halfW = 3.7, halfH = 2.3; // gun half-extents as seen from the side-front angle
+	const topH = 60, bottomH = bottomEl.offsetHeight + 24; // keep the gun clear of the HUD
+	const usableH = Math.max( innerHeight - topH - bottomH, innerHeight * 0.4 );
+	const d = Math.max( halfH / t * ( innerHeight / usableH ), halfW / ( t * camera.aspect ) ) * 1.12;
+	camBase.copy( camTarget ).addScaledVector( camDir, d );
+	scene.fog.near = d * 1.0; scene.fog.far = Math.max( d * 2.4, 32 );
+	camera.setViewOffset( innerWidth, innerHeight, 0, ( bottomH - topH ) / 2, innerWidth, innerHeight ); // nudge the picture up into the free space
+	camera.updateProjectionMatrix();
+
+}
 
 const spot = new THREE.SpotLight( 0xffe2b0, 320, 0, 0.5, 0.7, 2 );
 spot.position.set( -2, 7, 4 );
@@ -413,6 +451,85 @@ dustGeo.setAttribute( 'position', new THREE.BufferAttribute( dustPos, 3 ) );
 const dust = new THREE.Points( dustGeo, new THREE.PointsMaterial( { map: sparkTex, size: 0.07, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, color: 0xffd9a0 } ) );
 scene.add( dust );
 
+// the dealer: a pale mask and glowing eyes sitting at the far end of the table
+const dealer = new THREE.Group();
+dealer.position.set( 15, - 2.0, - 1.5 );
+dealer.scale.setScalar( 1.35 );
+scene.add( dealer );
+const cloth = new THREE.MeshStandardMaterial( { color: 0x15151c, roughness: 0.9 } );
+const maskMat = new THREE.MeshStandardMaterial( { color: 0xd9d1c1, roughness: 0.6 } );
+const glowRed = new THREE.MeshBasicMaterial( { color: 0xff2a1a, fog: false } );
+const glowWhite = new THREE.MeshBasicMaterial( { color: 0xffe8c0, fog: false } );
+const dTorso = new THREE.Mesh( new THREE.CapsuleGeometry( 1.0, 1.6, 8, 16 ), cloth ); dTorso.position.y = 1.2; dTorso.castShadow = true;
+const dHead = new THREE.Mesh( new THREE.SphereGeometry( 0.78, 24, 16 ), maskMat ); dHead.position.y = 3.5; dHead.scale.set( 0.9, 1.1, 0.9 ); dHead.castShadow = true;
+dealer.add( dTorso, dHead );
+for ( const z of [ - 0.28, 0.28 ] ) { const eye = new THREE.Mesh( new THREE.SphereGeometry( 0.11, 12, 8 ), glowRed ); eye.position.set( - 0.66, 3.65, z ); dealer.add( eye ); }
+const grin = new THREE.Mesh( new THREE.TorusGeometry( 0.3, 0.035, 6, 20, Math.PI ), glowWhite );
+grin.rotation.set( 0, - Math.PI / 2, Math.PI ); grin.position.set( - 0.66, 3.3, 0 ); dealer.add( grin );
+const dealerLight = new THREE.PointLight( 0xff3b2a, 70, 14, 2 );
+dealerLight.position.set( - 3, 3, 0 );
+dealer.add( dealerLight );
+
+// free character: "RobotExpressive" (CC0, Quaternius / Tomás Laulhé) replaces the placeholder figure once it loads
+const proceduralParts = [ dTorso, dHead, grin, ...dealer.children.filter( c => c.material === glowRed ) ];
+let dealerModel = null, dealerMixer = null, dealerDead = false;
+const dealerActions = {};
+let dealerCurrent = null;
+function dealerPlay( name, once ) {
+
+	const next = dealerActions[ name ]; if ( ! next ) return;
+	next.reset(); next.enabled = true;
+	if ( once ) { next.setLoop( THREE.LoopOnce, 1 ); next.clampWhenFinished = true; } else next.setLoop( THREE.LoopRepeat, Infinity );
+	if ( dealerCurrent && dealerCurrent !== next ) next.crossFadeFrom( dealerCurrent, 0.25, false );
+	next.play(); dealerCurrent = next;
+
+}
+new GLTFLoader().load( 'assets/RobotExpressive.glb', gltf => {
+
+	dealerModel = gltf.scene;
+	const box = new THREE.Box3().setFromObject( dealerModel );
+	const k = 4.8 / ( box.max.y - box.min.y );
+	dealerModel.scale.setScalar( k );
+	dealerModel.position.y = - box.min.y * k;
+	dealerModel.rotation.y = - Math.PI / 2; // face the gun
+	dealerModel.traverse( o => { if ( o.isMesh ) { o.castShadow = true; o.receiveShadow = true; } } );
+	proceduralParts.forEach( p => p.visible = false );
+	dealer.scale.setScalar( 1 ); dealer.position.y = - 2.6;
+	dealer.add( dealerModel );
+	dealerMixer = new THREE.AnimationMixer( dealerModel );
+	gltf.animations.forEach( c => { dealerActions[ c.name ] = dealerMixer.clipAction( c ); } );
+	dealerMixer.addEventListener( 'finished', () => { if ( ! dealerDead ) dealerPlay( 'Idle', false ); } );
+	dealerPlay( 'Idle', false );
+
+}, undefined, () => { /* keep the placeholder figure if the asset can't be fetched */ } );
+
+async function dealerHit() {
+
+	dealerLight.intensity = 400; sfx.thud();
+	if ( dealerModel ) dealerPlay( 'No', true );
+	await tween( 0.5, t => {
+
+		dealerLight.intensity = 400 - 330 * t;
+		dealer.position.x = 15 + Math.sin( t * 18 ) * 0.2 * ( 1 - t );
+		if ( ! dealerModel ) dealer.rotation.z = - 0.25 * Math.sin( t * Math.PI );
+
+	} );
+	dealer.position.x = 15; if ( ! dealerModel ) dealer.rotation.z = 0;
+
+}
+const dealerFall = () => {
+
+	if ( dealerModel ) { dealerDead = true; dealerPlay( 'Death', true ); return wait( 2.0 ); }
+	return tween( 1.1, t => { dealer.rotation.z = - 1.45 * t * t; dealer.position.y = - 2.0 - 0.7 * t; }, ease.lin );
+
+};
+const dealerRise = () => {
+
+	if ( dealerModel ) { dealerDead = false; dealerPlay( 'Idle', false ); return wait( 0.6 ); }
+	return tween( 0.6, t => { dealer.rotation.z = - 1.45 * ( 1 - t ); dealer.position.y = - 2.7 + 0.7 * t; }, ease.out );
+
+};
+
 // post-processing (bloom makes the muzzle flash bloom)
 const composer = new EffectComposer( renderer );
 composer.addPass( new RenderPass( scene, camera ) );
@@ -513,6 +630,8 @@ const sfx = {
 
 	},
 	blank: () => { noise( 0.08, 'highpass', 2500, 8000, 0.8 ); noise( 0.35, 'lowpass', 3500, 200, 0.7 ); tone( 150, 0.2, 0.4, 'sine', 50 ); },
+	shot: () => { noise( 0.12, 'highpass', 2500, 9000, 1.4 ); noise( 0.9, 'lowpass', 5000, 100, 1.4 ); tone( 120, 0.6, 0.9, 'sine', 28 ); },
+	thud: () => { tone( 90, 0.25, 0.7, 'sine', 40 ); noise( 0.12, 'lowpass', 900, 200, 0.5 ); },
 	exhale: () => { noise( 1.4, 'bandpass', 900, 350, 0.22 ); },
 	creak: () => { tone( 180 + Math.random() * 60, 0.35, 0.03, 'sawtooth', 120 ); },
 	heart: v => { tone( 62, 0.16, 0.5 * v, 'sine', 38 ); tone( 58, 0.16, 0.35 * v, 'sine', 36, 0.17 ); }
@@ -531,6 +650,7 @@ let score = 0;
 let state = 'busy'; // idle | busy | dead
 let recoil = 0, shake = 0;
 let aim = 0; // 0 = side view, 1 = looking down the barrel
+let aimD = 0; // 1 = over-the-shoulder shot toward the dealer
 let smoking = false;
 let push = 0; // slow dolly toward the muzzle during the standoff
 let hush = false; // dead silence right before the hammer falls
@@ -601,7 +721,13 @@ function drawEcg() {
 
 }
 
-function tension() { return state === 'dead' ? 0 : Math.pow( risk(), 0.8 ) * ( 0.55 + 0.6 * aim ); }
+function tension() {
+
+	if ( state === 'dead' ) return 0;
+	if ( cfg.mode === 'buckshot' ) return bsOdds() * ( 0.5 + 0.6 * Math.max( aim, aimD ) );
+	return Math.pow( risk(), 0.8 ) * ( 0.55 + 0.6 * aim );
+
+}
 
 // heartbeat: faster and louder the closer to the bullet you get
 ( function heartbeat() {
@@ -622,6 +748,8 @@ function tension() { return state === 'dead' ? 0 : Math.pow( risk(), 0.8 ) * ( 0
 function setMsg( t ) { msgEl.textContent = t; }
 function updateUI() {
 
+	if ( cfg.mode === 'buckshot' ) { bsUI(); return; }
+
 	const left = CHAMBERS - pulls;
 	oddsEl.textContent = state === 'dead' ? '' : `다음 발사 실탄일 확률: ${Math.round( risk() * 100 )}%  (남은 칸 ${left}/${CHAMBERS})`;
 	scoreEl.textContent = score; roundEl.textContent = round;
@@ -630,6 +758,7 @@ function updateUI() {
 	for ( let i = 0; i < blanks; i ++ ) dots.push( i < blanks - blanksFired ? '<span class="b">●</span>' : '<span class="x">○</span>' );
 	shellsEl.innerHTML = state === 'dead' ? '' : dots.join( ' ' ) + `<small>실탄 ${live} · 공포탄 ${blanks - blanksFired}/${blanks}</small>`;
 	resetBtn.disabled = shuffleBtn.disabled = pullBtn.disabled = state !== 'idle';
+	fitView();
 
 }
 
@@ -648,6 +777,7 @@ function spinTo( k ) {
 	}, ease.out ).then( () => { rot = to; } );
 
 }
+const setAimD = ( to, dur ) => { const from = aimD; return tween( dur, t => { aimD = from + ( to - from ) * t; }, ease.inOut ); };
 const setAim = ( to, dur ) => { const from = aim; return tween( dur, t => { aim = from + ( to - from ) * t; }, ease.inOut ); };
 
 async function reload() {
@@ -679,7 +809,9 @@ async function newGame() {
 	smoking = false;
 	resetDeath();
 	score = 0; round = 1;
-	setAim( 0, 0.8 );
+	setAim( 0, 0.8 ); setAimD( 0, 0.8 );
+	overTitle.textContent = 'BANG!';
+	if ( cfg.mode === 'buckshot' ) { await bsStart(); return; }
 	await reload();
 
 }
@@ -817,7 +949,7 @@ async function bang() {
 	flashLight.intensity = 0;
 	bloom.strength = 0.25;
 
-	if ( score > best ) {
+	if ( cfg.mode !== 'buckshot' && score > best ) {
 
 		best = score;
 		bestEl.textContent = best;
@@ -825,11 +957,373 @@ async function bang() {
 
 	}
 	await dying();
-	overText.textContent = ( score > 0 ? `${score}번 살아남았지만… ` : '첫 발에 당했습니다… ' ) + '심장이 멈췄습니다.';
+	overText.textContent = cfg.mode === 'buckshot' ? `라운드 ${bs.round}에서 쓰러졌습니다. 심장이 멈췄습니다.` : ( score > 0 ? `${score}번 살아남았지만… ` : '첫 발에 당했습니다… ' ) + '심장이 멈췄습니다.';
 	overEl.classList.add( 'show' );
 	updateUI();
 
 }
+
+// ---------- Buckshot mode: duel the dealer with shells, items and three rounds ----------
+const ITEMS = {
+	magnifier: { icon: '🔍', name: '돋보기', desc: '현재 약실의 탄이 실탄인지 공포탄인지 확인합니다.' },
+	beer: { icon: '🍺', name: '맥주', desc: '현재 약실의 탄을 배출합니다 (종류가 공개됩니다).' },
+	cigarette: { icon: '🚬', name: '담배', desc: '체력을 1 회복합니다.' },
+	handcuffs: { icon: '⛓️', name: '수갑', desc: '상대의 다음 턴을 건너뛰게 합니다.' },
+	saw: { icon: '🪚', name: '쇠톱', desc: '이번 발사가 실탄이면 피해가 2배입니다.' },
+	inverter: { icon: '🔄', name: '인버터', desc: '현재 약실의 탄을 실탄↔공포탄으로 뒤집습니다.' },
+	medicine: { icon: '💊', name: '만료된 약', desc: '50% 확률로 체력 2 회복, 아니면 체력 1 손실.' }
+};
+const ITEM_KEYS = Object.keys( ITEMS );
+const MAX_ITEMS = 6;
+const bs = { round: 1, won: 0, hpMax: 3, hp: { player: 3, dealer: 3 }, items: { player: [], dealer: [] }, queue: [], qi: 0, total: 0, liveN: 0, blankN: 0, used: [], known: { player: false, dealer: false }, cuffed: { player: false, dealer: false }, sawed: false, turn: 'player', over: false };
+const other = side => side === 'player' ? 'dealer' : 'player';
+const shuffleArr = a => { for ( let i = a.length - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ a[ i ], a[ j ] ] = [ a[ j ], a[ i ] ]; } return a; };
+const bsRemain = () => bs.queue.slice( bs.qi );
+function bsOdds() { // chance the next shell is live, from the player's point of view
+	const r = bsRemain(); if ( ! r.length ) return 0;
+	return r.filter( x => x === 'live' ).length / r.length;
+}
+const hearts = ( hp, max ) => '❤'.repeat( Math.max( hp, 0 ) ) + '<span class="x">♡</span>'.repeat( Math.max( max - Math.max( hp, 0 ), 0 ) );
+const shellDots = list => list.map( x => x === 'live' ? '<span style="color:#ff4b3a">●</span>' : '<span style="color:#5b8dff">●</span>' ).join( ' ' );
+const roundsRevealed = () => rounds.forEach( r => r.visible = false );
+
+function bsUI() {
+
+	const rem = bsRemain();
+	roundEl.textContent = bs.round + '/3'; scoreEl.textContent = bs.won;
+	shellsEl.innerHTML = bs.total ? `<span class="sh">${shellDots( [ ...Array( bs.liveN ).fill( 'live' ), ...Array( bs.blankN ).fill( 'blank' ) ] )}</span><small>장전: 실탄 ${bs.liveN} · 공포탄 ${bs.blankN} / 남은 탄 ${rem.length}</small>` : '';
+	oddsEl.innerHTML = state === 'dead' ? '' : ( bs.used.length ? `사용된 탄 <span class="sh">${shellDots( bs.used )}</span>` : '' );
+	$( 'dHp' ).innerHTML = hearts( bs.hp.dealer, bs.hpMax );
+	$( 'pHp' ).innerHTML = hearts( bs.hp.player, bs.hpMax );
+	$( 'dStatus' ).textContent = bs.cuffed.dealer ? '⛓ 수갑' : '';
+	$( 'pStatus' ).textContent = [ bs.cuffed.player ? '⛓ 수갑' : '', bs.sawed ? '🪚 쇠톱 장착' : '' ].filter( Boolean ).join( ' ' );
+	$( 'dItems' ).innerHTML = bs.items.dealer.map( k => `<span title="${ITEMS[ k ].desc}">${ITEMS[ k ].icon} ${ITEMS[ k ].name}</span>` ).join( '' );
+	const myTurn = state === 'idle' && bs.turn === 'player' && ! bs.over;
+	const box = $( 'pItems' ); box.innerHTML = '';
+	bs.items.player.forEach( k => {
+
+		const b = document.createElement( 'button' );
+		b.className = 'item'; b.title = ITEMS[ k ].desc; b.textContent = `${ITEMS[ k ].icon} ${ITEMS[ k ].name}`;
+		b.style.pointerEvents = 'auto';
+		b.disabled = ! myTurn || ( k === 'cigarette' && bs.hp.player >= bs.hpMax ) || ( k === 'handcuffs' && bs.cuffed.dealer ) || ( k === 'saw' && bs.sawed );
+		b.onclick = () => playerItem( k );
+		box.appendChild( b );
+
+	} );
+	$( 'shootDealer' ).disabled = $( 'shootSelf' ).disabled = ! myTurn;
+	$( 'shootDealer' ).style.pointerEvents = $( 'shootSelf' ).style.pointerEvents = 'auto';
+
+}
+
+async function bsStart() {
+
+	Object.assign( bs, { round: 1, won: 0, over: false, turn: 'player' } );
+	await bsStartRound();
+
+}
+
+async function bsStartRound() {
+
+	bs.hpMax = 2 + Math.floor( Math.random() * 3 ); // 2-4 charges
+	bs.hp = { player: bs.hpMax, dealer: bs.hpMax };
+	bs.items = { player: [], dealer: [] };
+	bs.cuffed = { player: false, dealer: false }; bs.sawed = false; bs.turn = 'player';
+	bs.total = 0; bs.used = []; bs.queue = []; bs.qi = 0;
+	await dealerRise();
+	setMsg( `라운드 ${bs.round} — 각자 체력 ${bs.hpMax}. 딜러를 쓰러뜨리세요.` );
+	state = 'busy'; bsUI();
+	await wait( 1.8 );
+	await bsLoad();
+	await bsNext();
+
+}
+
+async function bsLoad() {
+
+	state = 'busy';
+	const n = 2 + Math.floor( Math.random() * 5 ); // 2-6 shells
+	const liveN = 1 + Math.floor( Math.random() * ( n - 1 ) ); // at least one live and one blank
+	bs.total = n; bs.liveN = liveN; bs.blankN = n - liveN;
+	bs.queue = shuffleArr( [ ...Array( liveN ).fill( 'live' ), ...Array( n - liveN ).fill( 'blank' ) ] );
+	bs.qi = 0; bs.used = []; bs.sawed = false; bs.known = { player: false, dealer: false };
+	// show the composition (sorted), then hide it and shuffle
+	rounds.forEach( ( r, i ) => { r.visible = i < n; r.userData.cap.material = i < liveN ? liveMat : blankMat; } );
+	setMsg( `실탄 ${liveN}발, 공포탄 ${n - liveN}발을 장전합니다…` );
+	// deal items (none in round 1)
+	const per = bs.round === 1 ? 0 : bs.round === 2 ? 1 + Math.floor( Math.random() * 2 ) : 2 + Math.floor( Math.random() * 3 );
+	for ( const side of [ 'player', 'dealer' ] ) for ( let i = 0; i < per && bs.items[ side ].length < MAX_ITEMS; i ++ ) bs.items[ side ].push( ITEM_KEYS[ Math.floor( Math.random() * ITEM_KEYS.length ) ] );
+	bsUI();
+	await wait( 0.4 ); sfx.load();
+	await wait( 2.6 );
+	roundsRevealed();
+	setMsg( per ? '탄창을 섞습니다… 아이템이 지급되었습니다.' : '탄창을 섞습니다…' );
+	cur = 0;
+	await spinTo( 0 );
+
+}
+
+async function bsNext() {
+
+	if ( bs.over ) return;
+	if ( bs.qi >= bs.queue.length ) { setMsg( '탄창이 비었습니다. 다시 장전합니다…' ); await wait( 1.0 ); await bsLoad(); }
+	const side = bs.turn;
+	if ( bs.cuffed[ side ] ) {
+
+		bs.cuffed[ side ] = false; bsUI();
+		setMsg( side === 'player' ? '⛓ 수갑에 묶여 이번 턴을 건너뜁니다.' : '⛓ 딜러가 수갑에 묶여 턴을 건너뜁니다.' );
+		await wait( 1.6 );
+		bs.turn = other( side );
+		return bsNext();
+
+	}
+	if ( side === 'player' ) {
+
+		state = 'idle';
+		setMsg( bs.used.length ? '당신의 차례입니다.' : '당신의 차례입니다. 딜러 또는 자신에게 발사하거나 아이템을 쓰세요.' );
+		bsUI();
+		return;
+
+	}
+	await dealerTurn();
+
+}
+
+async function advanceChamber() { // eject-or-fire: the cylinder clicks round to the next shell
+
+	cur ++;
+	const from = rot;
+	await tween( 0.3, t => { rot = from - STEP * t; }, ease.inOut );
+	rot = from - STEP; sfx.tick();
+
+}
+
+async function bsLiveFx() {
+
+	sfx.shot(); flashSprite.visible = true; burst();
+	recoil = 1; shake = 0.5;
+	flashEl.style.background = '#fff'; flashEl.style.opacity = '0.9';
+	await tween( 0.5, t => {
+
+		flashEl.style.opacity = String( 0.9 * Math.pow( 1 - t, 2 ) );
+		flashLight.intensity = 400 * ( 1 - t ); bloom.strength = 0.25 + 1.4 * ( 1 - t );
+		flashSprite.material.opacity = 1 - t; flashSprite.scale.setScalar( 2 + 4 * t );
+
+	}, ease.out );
+	flashSprite.visible = false; flashLight.intensity = 0; bloom.strength = 0.25;
+
+}
+async function popBlank() {
+
+	sfx.blank(); shake = 0.3; recoil = 0.35; burst( 0.35 );
+	flashSprite.visible = true; flashLight.intensity = 120; bloom.strength = 0.9;
+	await tween( 0.25, t => { flashLight.intensity = 120 * ( 1 - t ); flashSprite.material.opacity = 1 - t; flashSprite.scale.setScalar( 1.2 + t ); bloom.strength = 0.25 + 0.65 * ( 1 - t ); } );
+	flashSprite.visible = false; flashLight.intensity = 0; bloom.strength = 0.25;
+
+}
+
+async function bsShoot( shooter, target ) {
+
+	state = 'busy'; bsUI();
+	const shell = bs.queue[ bs.qi ], isLive = shell === 'live';
+	const dmg = bs.sawed && isLive ? 2 : 1;
+	const atPlayer = target === 'player';
+	const odds = bs.known[ shooter ] ? ( isLive ? 1 : 0 ) : bsOdds();
+	if ( atPlayer ) setAim( 1, 1.0 ); else setAimD( 1, 1.0 );
+	await wait( 0.5 );
+	sfx.cock();
+	await tween( 0.35, t => { hammer.rotation.z = 0.7 * t; trigger.rotation.z = - 0.35 * t; }, ease.out );
+	let creaked = 0;
+	await tween( 1.0 + odds * 1.8 + Math.random() * 0.6, t => {
+
+		push = t; trigger.rotation.z = - 0.35 - 0.3 * t; hammer.rotation.z = 0.7 + 0.04 * t;
+		if ( t > creaked + 0.33 ) { creaked += 0.33; sfx.creak(); }
+
+	}, ease.inOut );
+	hush = true;
+	if ( bus ) bus.gain.setTargetAtTime( 0.05, actx.currentTime, 0.05 );
+	await wait( 0.3 + odds * 0.4 );
+	if ( bus ) bus.gain.setTargetAtTime( 1, actx.currentTime, 0.02 );
+	hush = false;
+	await tween( 0.05, t => { hammer.rotation.z = 0.74 * ( 1 - t ); }, ease.lin );
+
+	bs.sawed = false;
+	bs.used.push( shell ); bs.qi ++;
+	bs.known = { player: false, dealer: false };
+	const lethal = isLive && atPlayer && bs.hp.player - dmg <= 0;
+	if ( lethal ) { bs.hp.player = 0; bs.over = true; bsUI(); await bang(); return; }
+
+	if ( isLive ) {
+
+		await bsLiveFx();
+		bs.hp[ target ] -= dmg;
+		if ( atPlayer ) {
+
+			setMsg( dmg > 1 ? `💥 실탄! 쇠톱으로 ${dmg}의 피해를 입었습니다.` : '💥 실탄! 체력을 1 잃었습니다.' );
+			flashEl.style.background = '#a00'; flashEl.style.opacity = '0.7';
+			tween( 0.9, t => { flashEl.style.opacity = String( 0.7 * ( 1 - t ) ); } );
+			shake = 0.5;
+
+		} else {
+
+			setMsg( dmg > 1 ? `💥 실탄! 딜러에게 ${dmg}의 피해!` : '💥 실탄! 딜러에게 명중!' );
+			bsUI();
+			await dealerHit();
+
+		}
+
+	} else {
+
+		await popBlank();
+		setMsg( target === shooter ? '공포탄이었습니다. 한 번 더 쏠 수 있습니다.' : '공포탄이었습니다. 턴이 넘어갑니다.' );
+
+	}
+	bsUI();
+	await advanceChamber();
+	tween( 0.9, t => { push = 1 - t; } );
+	await Promise.all( [ setAim( 0, 0.9 ), setAimD( 0, 0.9 ) ] );
+	await wait( 0.8 );
+
+	if ( bs.hp.dealer <= 0 ) { await bsRoundWon(); return; }
+	bs.turn = ( ! isLive && target === shooter ) ? shooter : other( shooter );
+	await bsNext();
+
+}
+
+async function bsRoundWon() {
+
+	state = 'busy'; bsUI();
+	setMsg( '딜러가 쓰러졌습니다!' );
+	await dealerFall();
+	bs.won ++;
+	if ( bs.round >= 3 ) {
+
+		state = 'dead'; bs.over = true; bsUI();
+		setMsg( '' );
+		overTitle.textContent = 'VICTORY';
+		overText.textContent = '딜러를 모두 쓰러뜨리고 살아남았습니다.';
+		overEl.classList.add( 'show' );
+		return;
+
+	}
+	bs.round ++;
+	setMsg( `라운드 클리어! 라운드 ${bs.round}로 넘어갑니다…` );
+	await wait( 1.8 );
+	await bsStartRound();
+
+}
+
+// returns 'ended' when the use of an item finished the round or the match
+async function bsUseItem( side, k ) {
+
+	bs.items[ side ].splice( bs.items[ side ].indexOf( k ), 1 );
+	const who = side === 'player' ? '당신이' : '딜러가';
+	const shell = bs.queue[ bs.qi ];
+	sfx.load();
+	switch ( k ) {
+
+		case 'magnifier':
+			bs.known[ side ] = true;
+			if ( side === 'player' ) {
+
+				setMsg( `🔍 현재 약실: ${shell === 'live' ? '실탄!' : '공포탄'}` );
+				rounds[ cur ].userData.cap.material = shell === 'live' ? liveMat : blankMat; rounds[ cur ].visible = true;
+				bsUI(); await wait( 2.0 ); rounds[ cur ].visible = false;
+
+			} else setMsg( '🔍 딜러가 약실을 확인했습니다.' );
+			break;
+		case 'beer':
+			setMsg( `🍺 ${who} 탄을 배출했습니다: ${shell === 'live' ? '실탄' : '공포탄'}` );
+			sfx.click(); bs.used.push( shell ); bs.qi ++; bs.known = { player: false, dealer: false };
+			bsUI(); await advanceChamber();
+			break;
+		case 'cigarette':
+			bs.hp[ side ] = Math.min( bs.hpMax, bs.hp[ side ] + 1 );
+			setMsg( `🚬 ${who} 담배를 피웠습니다. 체력 +1` );
+			break;
+		case 'handcuffs':
+			bs.cuffed[ other( side ) ] = true;
+			setMsg( `⛓️ ${who} ${side === 'player' ? '딜러' : '당신'}에게 수갑을 채웠습니다.` );
+			break;
+		case 'saw':
+			bs.sawed = true;
+			setMsg( `🪚 ${who} 총신을 잘랐습니다. 실탄이면 피해 2배!` );
+			sfx.creak();
+			break;
+		case 'inverter':
+			bs.queue[ bs.qi ] = shell === 'live' ? 'blank' : 'live';
+			bs.known[ other( side ) ] = false; // the other side's information is now stale
+			setMsg( `🔄 ${who} 약실의 탄을 뒤집었습니다.` );
+			break;
+		case 'medicine':
+			if ( Math.random() < 0.5 ) { bs.hp[ side ] = Math.min( bs.hpMax, bs.hp[ side ] + 2 ); setMsg( `💊 ${who} 만료된 약을 먹었습니다… 체력 +2!` ); }
+			else {
+
+				bs.hp[ side ] -= 1; setMsg( `💊 ${who} 만료된 약을 먹었습니다… 체력 -1…` );
+				if ( bs.hp[ side ] <= 0 ) {
+
+					bsUI(); await wait( 1.2 );
+					if ( side === 'player' ) { bs.over = true; await bang(); } else await bsRoundWon();
+					return 'ended';
+
+				}
+
+			}
+			break;
+
+	}
+	bsUI();
+	await wait( 0.9 );
+
+}
+
+async function playerItem( k ) {
+
+	if ( state !== 'idle' || bs.turn !== 'player' || bs.over ) return;
+	audio();
+	state = 'busy'; bsUI();
+	if ( await bsUseItem( 'player', k ) === 'ended' ) return;
+	if ( bs.qi >= bs.queue.length ) { await bsNext(); return; } // a beer emptied the cylinder
+	state = 'idle'; bsUI();
+
+}
+
+async function dealerTurn() {
+
+	state = 'busy'; bsUI();
+	setMsg( '딜러의 차례입니다…' );
+	await wait( 1.2 );
+	const has = k => bs.items.dealer.includes( k );
+	const use = async k => { const r = await bsUseItem( 'dealer', k ); await wait( 0.5 ); return r; };
+	for ( let guard = 0; guard < 14; guard ++ ) {
+
+		const rem = bsRemain();
+		const shell = bs.queue[ bs.qi ], known = bs.known.dealer;
+		let k = null;
+		if ( has( 'cigarette' ) && bs.hp.dealer < bs.hpMax ) k = 'cigarette';
+		else if ( has( 'handcuffs' ) && ! bs.cuffed.player ) k = 'handcuffs';
+		else if ( has( 'magnifier' ) && ! known ) k = 'magnifier';
+		else if ( has( 'beer' ) && ! known && rem.length > 1 && Math.random() < 0.6 ) k = 'beer';
+		else if ( has( 'inverter' ) && known && shell === 'blank' ) k = 'inverter';
+		else if ( has( 'medicine' ) && bs.hp.dealer <= 2 && Math.random() < 0.4 ) k = 'medicine';
+		if ( ! k ) break;
+		if ( await use( k ) === 'ended' ) return;
+		if ( bs.qi >= bs.queue.length ) { await bsNext(); return; }
+
+	}
+	const shell = bs.queue[ bs.qi ], known = bs.known.dealer;
+	const pl = known ? ( shell === 'live' ? 1 : 0 ) : bsOdds();
+	const target = pl > 0.5 ? 'player' : ( pl < 0.5 ? 'dealer' : ( Math.random() < 0.5 ? 'player' : 'dealer' ) );
+	if ( target === 'player' && has( 'saw' ) && ! bs.sawed && ( known ? shell === 'live' : pl > 0.6 ) ) { if ( await use( 'saw' ) === 'ended' ) return; }
+	setMsg( target === 'player' ? '딜러가 당신에게 총을 겨눕니다…' : '딜러가 자기 자신에게 총을 겨눕니다…' );
+	await wait( 1.0 );
+	await bsShoot( 'dealer', target );
+
+}
+
+$( 'shootDealer' ).onclick = () => { if ( state === 'idle' && bs.turn === 'player' ) { audio(); bsShoot( 'player', 'dealer' ); } };
+$( 'shootSelf' ).onclick = () => { if ( state === 'idle' && bs.turn === 'player' ) { audio(); bsShoot( 'player', 'player' ); } };
+
+
 
 const fsBtn = $( 'fs' );
 function toggleFullscreen() {
@@ -869,6 +1363,7 @@ function beginGame( mode ) {
 
 	audio();
 	cfg.mode = mode;
+	document.body.classList.toggle( 'bs', mode === 'buckshot' );
 	startEl.classList.add( 'hide' );
 	newGame();
 
@@ -877,6 +1372,7 @@ function syncCustom() { $( 'liveVal' ).textContent = cfg.live; $( 'blankVal' ).t
 const adjust = d => { cfg.live = Math.max( 1, Math.min( CHAMBERS - 1, cfg.live + d ) ); syncCustom(); };
 $( 'startBtn' ).onclick = () => { audio(); showMenu( true ); };
 $( 'modeRandom' ).onclick = () => beginGame( 'random' );
+$( 'modeBuck' ).onclick = () => beginGame( 'buckshot' );
 $( 'modeCustom' ).onclick = () => { customEl.style.display = 'flex'; syncCustom(); };
 $( 'liveMinus' ).onclick = () => adjust( - 1 );
 $( 'livePlus' ).onclick = () => adjust( 1 );
@@ -891,6 +1387,7 @@ addEventListener( 'keydown', e => {
 
 	if ( e.repeat ) return;
 	if ( state === 'menu' ) return;
+	if ( cfg.mode === 'buckshot' ) { if ( e.code === 'Space' && state === 'dead' ) { e.preventDefault(); audio(); newGame(); } return; }
 	if ( e.code === 'Space' ) { e.preventDefault(); if ( state === 'dead' ) { audio(); newGame(); } else pull(); }
 	else if ( e.code === 'KeyS' ) shuffleOrder();
 	else if ( e.code === 'KeyR' ) resetCylinder();
@@ -905,12 +1402,16 @@ addEventListener( 'resize', () => {
 
 	camera.aspect = innerWidth / innerHeight;
 	camera.updateProjectionMatrix();
+	fitView();
 	renderer.setSize( innerWidth, innerHeight );
 	composer.setSize( innerWidth, innerHeight );
 
 } );
 
+fitView();
 const barrelCam = new THREE.Vector3( 5.4, 0.75, 1.1 );
+const dealerCam = new THREE.Vector3( - 3.5, 1.8, 2.8 );
+const dealerTarget = new THREE.Vector3( 13.5, 0.3, - 1.5 );
 const barrelTarget = new THREE.Vector3( 0, 0.3, 0 );
 const tmpPos = new THREE.Vector3(), tmpTarget = new THREE.Vector3();
 const clock = new THREE.Clock();
@@ -954,6 +1455,8 @@ renderer.setAnimationLoop( () => {
 	dp.needsUpdate = true;
 
 	cyl.rotation.x = rot;
+	dealer.visible = cfg.mode === 'buckshot';
+	if ( dealerMixer ) dealerMixer.update( dt );
 
 	const T = tension();
 	if ( actx && ! drone ) { // low drone that swells with the odds
@@ -982,10 +1485,12 @@ renderer.setAnimationLoop( () => {
 	tmpPos.x += ( Math.random() - 0.5 ) * ( shake + tremble ) + Math.sin( time * 0.8 ) * 0.03;
 	tmpPos.y += ( Math.random() - 0.5 ) * ( shake + tremble ) + Math.sin( time * 1.1 ) * 0.03;
 	tmpPos.z += ( Math.random() - 0.5 ) * ( shake + tremble );
-	camera.position.copy( tmpPos );
 	tmpTarget.copy( camTarget ).lerp( barrelTarget, e );
+	const eD = aimD * aimD * ( 3 - 2 * aimD );
+	tmpPos.lerp( dealerCam, eD ); tmpTarget.lerp( dealerTarget, eD );
+	camera.position.copy( tmpPos );
 	camera.lookAt( tmpTarget );
-	const fov = 40 - 8 * e - 6 * push * e;
+	const fov = 40 - 8 * e - 6 * push * e - 4 * eD;
 	if ( camera.fov !== fov ) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
 	drawEcg();
