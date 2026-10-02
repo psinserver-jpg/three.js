@@ -79,6 +79,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 const $ = id => document.getElementById( id );
 const subEl = $( 'sub' ), hintEl = $( 'hint' ), turnEl = $( 'turn' ), roundEl = $( 'round' ), tipEl = $( 'tip' );
@@ -94,13 +95,14 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
+renderer.localClippingEnabled = true;
 document.body.prepend( renderer.domElement );
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color( 0x020202 );
 scene.fog = new THREE.FogExp2( 0x030303, 0.16 );
 scene.environment = new THREE.PMREMGenerator( renderer ).fromScene( new RoomEnvironment(), 0.04 ).texture;
-scene.environmentIntensity = 0.12;
+scene.environmentIntensity = 0.1;
 
 const CAM = new THREE.Vector3( 0, 1.3, 1.3 );
 const LOOK = new THREE.Vector3( 0, 0.9, - 0.6 );
@@ -207,7 +209,7 @@ const shade = mesh( new THREE.ConeGeometry( 0.28, 0.2, 32, 1, true ), new THREE.
 shade.castShadow = false;
 const bulbMat = new THREE.MeshBasicMaterial( { color: 0xfff1c9 } );
 mesh( new THREE.SphereGeometry( 0.05, 16, 12 ), bulbMat, lamp, 0, - 1.38, 0 ).castShadow = false;
-const spot = new THREE.SpotLight( 0xffe2b0, 20, 6, 0.9, 0.6, 1.6 );
+const spot = new THREE.SpotLight( 0xffe2b0, 7, 6, 0.9, 0.6, 1.6 );
 spot.position.set( 0, - 1.36, 0 );
 spot.castShadow = true; spot.shadow.mapSize.set( 2048, 2048 ); spot.shadow.bias = - 0.0005; spot.shadow.radius = 4;
 lamp.add( spot ); spot.target.position.set( 0, - 3, 0 ); lamp.add( spot.target );
@@ -248,7 +250,7 @@ const dispDealer = makeDisplay( 'DEALER' ); dispDealer.position.set( 0, TABLE_Y,
 
 // ---------- shotgun (procedural pump-action, local +x = muzzle) ----------
 const gunRoot = new THREE.Group(); scene.add( gunRoot );
-const gun = new THREE.Group(); gun.rotation.y = - Math.PI / 2; gunRoot.add( gun ); // gunRoot's +z points down the barrel
+const gun = new THREE.Group(); gun.rotation.y = - Math.PI / 2; gun.scale.setScalar( 0.85 ); gunRoot.add( gun ); // gunRoot's +z points down the barrel
 mesh( new THREE.BoxGeometry( 0.24, 0.075, 0.05 ), M.metal, gun, 0, 0, 0 ); // receiver
 mesh( new THREE.BoxGeometry( 0.07, 0.025, 0.052 ), M.black, gun, 0.02, 0.0, 0 ); // ejection port
 const front = new THREE.Group(); front.position.x = 0.12; gun.add( front ); // barrel + magazine (scaled when sawed off)
@@ -259,8 +261,8 @@ mesh( new THREE.SphereGeometry( 0.004, 8, 6 ), M.brass, front, 0.54, 0.038, 0 );
 const bore = new THREE.Mesh( new THREE.CircleGeometry( 0.011, 16 ).rotateY( Math.PI / 2 ), new THREE.MeshBasicMaterial( { color: 0x000000 } ) ); bore.position.set( 0.561, 0.022, 0 ); front.add( bore );
 const muzzle = new THREE.Object3D(); muzzle.position.set( 0.58, 0.022, 0 ); front.add( muzzle );
 const pump = new THREE.Group(); gun.add( pump );
-const fore = mesh( new THREE.CylinderGeometry( 0.024, 0.024, 0.2, 16 ).rotateZ( Math.PI / 2 ), M.wood, pump, 0.3, - 0.012, 0 );
-for ( let i = 0; i < 6; i ++ ) mesh( new THREE.TorusGeometry( 0.0245, 0.002, 4, 16 ).rotateY( Math.PI / 2 ), M.black, pump, 0.23 + i * 0.028, - 0.012, 0 );
+const fore = mesh( new THREE.CylinderGeometry( 0.025, 0.025, 0.2, 16 ).rotateZ( Math.PI / 2 ), M.wood, pump, 0.25, - 0.012, 0 );
+for ( let i = 0; i < 6; i ++ ) mesh( new THREE.TorusGeometry( 0.0255, 0.002, 4, 16 ).rotateY( Math.PI / 2 ), M.black, pump, 0.18 + i * 0.028, - 0.012, 0 );
 const stockShape = new THREE.Shape();
 stockShape.moveTo( - 0.12, 0.035 ); stockShape.lineTo( - 0.22, 0.03 ); stockShape.lineTo( - 0.52, 0.01 ); stockShape.lineTo( - 0.54, - 0.13 ); stockShape.lineTo( - 0.47, - 0.135 );
 stockShape.quadraticCurveTo( - 0.26, - 0.06, - 0.2, - 0.085 ); stockShape.lineTo( - 0.16, - 0.09 ); stockShape.quadraticCurveTo( - 0.15, - 0.04, - 0.12, - 0.035 ); stockShape.closePath();
@@ -270,7 +272,8 @@ mesh( new THREE.BoxGeometry( 0.012, 0.15, 0.046 ), M.black, gun, - 0.535, - 0.06
 const guard = mesh( new THREE.TorusGeometry( 0.026, 0.004, 6, 20, Math.PI ), M.metal, gun, - 0.065, - 0.038, 0 ); guard.rotation.z = Math.PI;
 const trig = mesh( new THREE.BoxGeometry( 0.006, 0.03, 0.008 ), M.metalLight, gun, - 0.06, - 0.05, 0 ); trig.rotation.z = 0.3;
 const gripMark = new THREE.Object3D(); gripMark.position.set( - 0.17, - 0.06, 0 ); gun.add( gripMark );
-const foreMark = new THREE.Object3D(); foreMark.position.set( 0.3, - 0.03, 0 ); pump.add( foreMark );
+const foreMark = new THREE.Object3D(); foreMark.position.set( 0.25, - 0.035, 0 ); pump.add( foreMark );
+const barrelMark = new THREE.Object3D(); barrelMark.position.set( 0.36, 0.02, 0 ); front.add( barrelMark );
 const portMark = new THREE.Object3D(); portMark.position.set( 0.0, - 0.045, 0 ); gun.add( portMark );
 
 // muzzle flash + light
@@ -286,98 +289,221 @@ function pose( p, target, roll = 0 ) {
 	return { p: p.clone(), q: dummy.quaternion.clone() };
 
 }
-const HEAD = new THREE.Vector3( 0, 1.5, - 1.15 );
+const HEAD = new THREE.Vector3( 0, 1.36, - 0.9 );
 const POSE = {
-	table: pose( new THREE.Vector3( 0.02, TABLE_Y + 0.03, 0.05 ), new THREE.Vector3( 1, TABLE_Y + 0.03, 0.15 ), Math.PI / 2 ),
-	lift: pose( new THREE.Vector3( 0.1, 1.0, 0.75 ), new THREE.Vector3( 0, 1.0, - 1 ) ),
-	playerAimDealer: pose( new THREE.Vector3( 0.16, 1.07, 0.85 ), new THREE.Vector3( 0, 1.38, - 1.15 ) ),
-	playerAimSelf: pose( new THREE.Vector3( 0.03, 1.18, 0.5 ), CAM.clone(), 0.2 ),
-	dealerAimPlayer: pose( new THREE.Vector3( 0.06, 1.12, - 0.62 ), CAM.clone() ),
-	dealerLift: pose( new THREE.Vector3( 0.05, 1.0, - 0.55 ), new THREE.Vector3( 0, 1.1, 1 ) ),
-	dealerAimSelf: pose( new THREE.Vector3( 0.09, 1.02, - 0.58 ), HEAD.clone().add( new THREE.Vector3( 0, - 0.06, 0 ) ), 0.4 )
+	// on the table, lying on its side, stock toward the player and muzzle toward the dealer
+	table: pose( new THREE.Vector3( 0.05, TABLE_Y + 0.03, 0.16 ), new THREE.Vector3( 0.32, TABLE_Y + 0.03, - 1 ), Math.PI / 2 ),
+	playerHold: pose( new THREE.Vector3( 0.1, 0.98, 1.0 ), new THREE.Vector3( 0, 0.85, - 1 ) ),
+	playerAimDealer: pose( new THREE.Vector3( 0.11, 1.16, 1.02 ), new THREE.Vector3( 0, 1.35, - 1 ) ), // shouldered
+	playerAimSelf: pose( new THREE.Vector3( 0.02, 0.98, 0.88 ), CAM.clone().add( new THREE.Vector3( 0, - 0.08, 0 ) ), 0.1 ), // barrel tilted up under your chin // turned round, muzzle at your face
+	dealerHold: pose( new THREE.Vector3( - 0.05, 0.98, - 0.5 ), new THREE.Vector3( 0.2, 0.9, 1 ) ),
+	dealerAimPlayer: pose( new THREE.Vector3( - 0.1, 1.16, - 0.55 ), CAM.clone() ),
+	dealerAimSelf: pose( new THREE.Vector3( 0.02, 0.93, - 0.42 ), HEAD.clone().add( new THREE.Vector3( 0, - 0.06, 0 ) ), 0.3 ) // under the chin
 };
 gunRoot.position.copy( POSE.table.p ); gunRoot.quaternion.copy( POSE.table.q );
-let gunHolder = null; // null | 'player' | 'dealer'
-function moveGun( to, dur = 0.8 ) {
+function moveGun( to, dur = 0.8, arc = 0 ) {
 
 	const p0 = gunRoot.position.clone(), q0 = gunRoot.quaternion.clone();
-	return tween( dur, t => { gunRoot.position.lerpVectors( p0, to.p, t ); gunRoot.quaternion.slerpQuaternions( q0, to.q, t ); }, ease.inOut );
+	return tween( dur, t => { gunRoot.position.lerpVectors( p0, to.p, t ); gunRoot.position.y += Math.sin( t * Math.PI ) * arc; gunRoot.quaternion.slerpQuaternions( q0, to.q, t ); }, ease.inOut );
 
 }
 
-// ---------- dealer ----------
-const dealer = new THREE.Group(); dealer.position.set( 0, 0, - 1.15 ); scene.add( dealer );
-const torso = mesh( new THREE.CylinderGeometry( 0.24, 0.17, 0.62, 24 ), M.suit, dealer, 0, 1.03, 0 ); torso.scale.z = 0.6; // V-shaped jacket
-for ( const s of [ - 1, 1 ] ) mesh( new THREE.SphereGeometry( 0.075, 16, 12 ), M.suit, dealer, s * 0.215, 1.255, 0 ).scale.set( 1.1, 0.8, 0.9 ); // shoulders
-mesh( new THREE.BoxGeometry( 0.12, 0.16, 0.02 ), new THREE.MeshStandardMaterial( { color: 0x6b675e, roughness: 0.8 } ), dealer, 0, 1.19, 0.125 ).rotation.x = - 0.1; // grimy shirt
-const neck = mesh( new THREE.CylinderGeometry( 0.048, 0.056, 0.12, 16 ), M.skin, dealer, 0, 1.32, 0.0 );
-const headPivot = new THREE.Group(); headPivot.position.set( 0, 1.36, 0.0 ); dealer.add( headPivot );
-let headModel = new THREE.Mesh( new THREE.SphereGeometry( 0.11, 24, 16 ), M.skin ); headModel.position.y = 0.1; headModel.scale.set( 0.9, 1.2, 1 ); headPivot.add( headModel );
+// who holds the gun with which hand; hands chase their targets through IK
+function hold( who, right, left, snappy = false ) { const r = rigs[ who ]; if ( ! r ) return; r.targets.Right = right; r.targets.Left = left; r.snappy = snappy; }
+function release( who ) { hold( who, null, null ); }
+async function pickUp( who ) {
 
-// arms: shoulder -> elbow -> hand, re-solved every frame so the hands can grab the gun
-const arms = [ - 1, 1 ].map( s => {
+	if ( who === 'player' ) {
 
-	const upper = mesh( new THREE.CapsuleGeometry( 0.045, 1, 6, 12 ), M.suit, dealer );
-	const lower = mesh( new THREE.CapsuleGeometry( 0.04, 1, 6, 12 ), M.suit, dealer );
-	const hand = new THREE.Group(); dealer.add( hand );
-	mesh( new THREE.BoxGeometry( 0.07, 0.022, 0.085 ), M.skin, hand, 0, 0, 0 );
-	for ( let f = 0; f < 4; f ++ ) {
+		hold( 'player', gripMark, null );
+		await tween( 0.55, t => { playerLean = t; }, ease.inOut ); // lean in and reach
+		sfx.pick(); hold( 'player', gripMark, null, true );
+		const mv = moveGun( POSE.playerHold, 0.75, 0.12 );
+		tween( 0.75, t => { playerLean = 1 - t; }, ease.inOut );
+		await mv;
+		hold( 'player', gripMark, foreMark ); await wait( 0.3 ); hold( 'player', gripMark, foreMark, true ); // support hand finds the pump
 
-		const fx = - 0.027 + f * 0.018;
-		const p1 = mesh( new THREE.CapsuleGeometry( 0.0065, 0.06, 4, 8 ), M.skin, hand, fx, - 0.004, 0.08 ); p1.rotation.x = Math.PI / 2 + 0.15;
-		const p2 = mesh( new THREE.CapsuleGeometry( 0.006, 0.045, 4, 8 ), M.skin, hand, fx, - 0.018, 0.135 ); p2.rotation.x = Math.PI / 2 + 0.7;
+	} else {
+
+		hold( 'dealer', foreMark, barrelMark );
+		await tween( 0.65, t => { dealerLean = t; }, ease.inOut );
+		sfx.pick(); hold( 'dealer', foreMark, barrelMark, true );
+		const mv = moveGun( POSE.dealerHold, 0.85, 0.1 );
+		tween( 0.85, t => { dealerLean = 1 - t; }, ease.inOut );
+		await mv;
+		hold( 'dealer', gripMark, foreMark ); await wait( 0.35 ); hold( 'dealer', gripMark, foreMark, true ); // re-grip on the stock
 
 	}
-	mesh( new THREE.CapsuleGeometry( 0.007, 0.04, 4, 8 ), M.skin, hand, s * - 0.045, - 0.002, 0.03 ).rotation.set( Math.PI / 2, 0, s * 0.7 ); // thumb
-	const rest = new THREE.Vector3( s * 0.19, TABLE_Y + 0.015, 0.68 ); // in dealer space
-	return { s, upper, lower, hand, rest, target: rest.clone(), cur: rest.clone() };
+
+}
+async function aimAt( who, self ) {
+
+	// turning the gun on yourself means holding it by the pump and barrel
+	if ( self ) hold( who, portMark, foreMark ); else hold( who, gripMark, foreMark );
+	const to = who === 'player' ? ( self ? POSE.playerAimSelf : POSE.playerAimDealer ) : ( self ? POSE.dealerAimSelf : POSE.dealerAimPlayer );
+	if ( who === 'player' ) tween( 0.8, t => { lookDown = self ? t : 0; }, ease.inOut ); // look down the barrel at your own chin
+	await moveGun( to, self ? 1.1 : 0.6, self ? 0.08 : 0 );
+	if ( self ) hold( who, portMark, foreMark, true ); else hold( who, gripMark, foreMark, true );
+
+}
+async function rackPump( who ) {
+
+	sfx.rack();
+	await tween( 0.4, t => { pump.position.x = - 0.07 * Math.sin( t * Math.PI ); } );
+
+}
+async function putDown( who ) {
+
+	hold( who, gripMark, foreMark );
+	if ( who === 'player' ) tween( 0.75, t => { playerLean = Math.sin( t * Math.PI ) * 0.7; } );
+	else tween( 0.8, t => { dealerLean = Math.sin( t * Math.PI ) * 0.8; } );
+	await moveGun( POSE.table, 0.75, 0.06 );
+	release( who );
+	if ( who === 'player' && lookDown > 0 ) tween( 0.5, t => { lookDown = 1 - t; } );
+	await wait( 0.2 );
+
+}
+
+// ---------- characters: rigged bodies with two-bone IK arms ----------
+const dealer = new THREE.Group(); dealer.position.set( 0, - 0.22, - 0.98 ); scene.add( dealer );
+const playerBody = new THREE.Group(); playerBody.rotation.y = Math.PI; scene.add( playerBody );
+const headAnchor = new THREE.Group(); scene.add( headAnchor ); // the scanned head rides on the dealer's head bone
+const neckClip = new THREE.Plane( new THREE.Vector3( 0, 1, 0 ), 0 );
+const rigs = {};
+let dealerLean = 0, playerLean = 0, lookDown = 0;
+const V = () => new THREE.Vector3(), Q = () => new THREE.Quaternion();
+const _a = V(), _b = V(), _c = V(), _d = V(), _qa = Q(), _qb = Q(), _qc = Q();
+const AX = { x: new THREE.Vector3( 1, 0, 0 ), y: new THREE.Vector3( 0, 1, 0 ) };
+
+function rotateBoneWorld( bone, axis, angle ) { // apply a world-space rotation to a bone, keeping its parent
+
+	bone.getWorldQuaternion( _qb );
+	_qa.setFromAxisAngle( axis, angle ).multiply( _qb );
+	bone.parent.getWorldQuaternion( _qc ).invert();
+	bone.quaternion.copy( _qc.multiply( _qa ) );
+	bone.updateWorldMatrix( false, true );
+
+}
+function aimBone( bone, child, target ) { // swing a bone so its child lands on the line toward target
+
+	const bp = bone.getWorldPosition( _a ), cp = child.getWorldPosition( _b );
+	_c.subVectors( cp, bp ).normalize(); _d.subVectors( target, bp ).normalize();
+	_qa.setFromUnitVectors( _c, _d ).multiply( bone.getWorldQuaternion( _qb ) );
+	bone.parent.getWorldQuaternion( _qc ).invert();
+	bone.quaternion.copy( _qc.multiply( _qa ) );
+	bone.updateWorldMatrix( false, true );
+
+}
+const _elbow = V(), _dir = V(), _bend = V(), _hand = V();
+function solveArm( arm, target, pole ) {
+
+	const S = arm.upper.getWorldPosition( V() );
+	_dir.subVectors( target, S );
+	const d = THREE.MathUtils.clamp( _dir.length(), 0.05, arm.la + arm.lb - 0.001 );
+	_dir.normalize();
+	const along = ( arm.la * arm.la - arm.lb * arm.lb + d * d ) / ( 2 * d ), h = Math.sqrt( Math.max( arm.la * arm.la - along * along, 0 ) );
+	_bend.subVectors( pole, S ); _bend.addScaledVector( _dir, - _bend.dot( _dir ) ).normalize();
+	_elbow.copy( S ).addScaledVector( _dir, along ).addScaledVector( _bend, h );
+	aimBone( arm.upper, arm.fore, _elbow );
+	aimBone( arm.fore, arm.hand, _hand.copy( S ).addScaledVector( _dir, d ) );
+
+}
+
+function setupRig( gltfScene, parent, name, color ) {
+
+	const model = gltfScene; parent.add( model );
+	const B = n => model.getObjectByName( 'mixamorig' + n );
+	const rig = { name, model, bones: [], bind: new Map(), arms: {}, grip: 0, targets: { Left: null, Right: null }, snappy: false,
+		spine: B( 'Spine1' ), spine2: B( 'Spine2' ), neck: B( 'Neck' ), head: B( 'Head' ) };
+	model.traverse( o => {
+
+		if ( o.isMesh ) { o.castShadow = o.receiveShadow = true; o.frustumCulled = false; o.material = new THREE.MeshStandardMaterial( { color: o.name.includes( 'Joints' ) ? 0x070708 : color, roughness: 0.85, metalness: 0.0, vertexColors: false } ); }
+		if ( o.isBone ) { rig.bind.set( o, o.quaternion.clone() ); rig.bones.push( o ); }
+
+	} );
+	model.updateMatrixWorld( true );
+	for ( const s of [ 'Left', 'Right' ] ) {
+
+		const upper = B( s + 'Arm' ), fore = B( s + 'ForeArm' ), hand = B( s + 'Hand' );
+		const fingers = [];
+		for ( const f of [ 'Index', 'Middle', 'Ring', 'Pinky' ] ) for ( let i = 1; i <= 3; i ++ ) { const fb = B( s + 'Hand' + f + i ); if ( fb ) fingers.push( fb ); }
+		rig.arms[ s ] = { upper, fore, hand, fingers, mid: B( s + 'HandMiddle1' ), la: upper.getWorldPosition( V() ).distanceTo( fore.getWorldPosition( V() ) ), lb: fore.getWorldPosition( V() ).distanceTo( hand.getWorldPosition( V() ) ), cur: null, rest: V() };
+
+	}
+	return rig;
+
+}
+
+// per-frame pose: reset to bind, lean, look, then IK both arms to their targets
+let FINGER_SIGN = - 1;
+const _qf = new THREE.Quaternion(), FINGER_AXIS = new THREE.Vector3( 0, 0, 1 );
+function updateRig( rig, dt, lean, leanSign, restFn, poleFn, lookFn ) {
+
+	for ( const b of rig.bones ) b.quaternion.copy( rig.bind.get( b ) );
+	rig.model.updateMatrixWorld( true );
+	rotateBoneWorld( rig.spine, AX.x, leanSign * ( 0.12 + lean * 0.35 ) );
+	rotateBoneWorld( rig.spine2, AX.x, leanSign * lean * 0.2 );
+	if ( lookFn ) lookFn( rig );
+	const want = rig.targets.Left || rig.targets.Right ? 1 : 0;
+	rig.grip += ( want - rig.grip ) * ( 1 - Math.pow( 0.002, dt ) );
+	for ( const s of [ 'Left', 'Right' ] ) {
+
+		const arm = rig.arms[ s ];
+		const tgt = rig.targets[ s ] ? rig.targets[ s ].getWorldPosition( V() ) : restFn( s );
+		if ( ! arm.cur ) arm.cur = tgt.clone();
+		arm.cur.lerp( tgt, 1 - Math.pow( rig.snappy && rig.targets[ s ] ? 1e-7 : 0.003, dt ) );
+		solveArm( arm, arm.cur, poleFn( s, arm ) );
+		if ( rig.targets[ s ] && arm.mid ) { // wrap the fingers around the gun instead of leaving the hand flat
+
+			const side = _c.set( 1, 0, 0 ).applyQuaternion( gunRoot.quaternion ); // across the barrel
+			const sideSign = Math.sign( arm.upper.getWorldPosition( _b ).sub( rig.model.getWorldPosition( _d ) ).dot( side ) ) || 1;
+			const dir = side.multiplyScalar( - sideSign ).add( _d.set( 0, rig.targets[ s ] === gripMark || rig.targets[ s ] === portMark ? - 0.6 : 0.5, 0 ) ).normalize();
+			aimBone( arm.hand, arm.mid, arm.hand.getWorldPosition( _hand ).add( dir ) );
+
+		}
+		const curl = rig.targets[ s ] ? rig.grip : 0.25;
+		_qf.setFromAxisAngle( FINGER_AXIS, ( s === 'Left' ? 1 : - 1 ) * FINGER_SIGN * curl * 0.75 );
+		for ( const f of arm.fingers ) { f.quaternion.multiply( _qf ); }
+
+	}
+
+}
+
+const loader = new GLTFLoader();
+let headModel = null;
+loader.load( 'assets/Xbot.glb', gltf => {
+
+	// dealer: a tall dark figure leaning over the table
+	rigs.dealer = setupRig( gltf.scene, dealer, 'dealer', 0x0d0d10 );
+	rigs.dealer.head.scale.setScalar( 0.001 ); // the mannequin head is replaced by the scanned one
+	rigs.dealer.model.updateMatrixWorld( true );
+	rigs.dealer.headOffset = rigs.dealer.head.getWorldQuaternion( Q() ).invert();
+	// player: same rig, head hidden, camera sits where the eyes would be
+	const pScene = cloneSkinned( gltf.scene );
+	rigs.player = setupRig( pScene, playerBody, 'player', 0x3a3326 );
+	rigs.player.head.scale.setScalar( 0.001 ); rigs.player.neck.scale.setScalar( 0.4 );
+	rigs.player.model.updateMatrixWorld( true );
+	rigs.player.eyeY = rigs.player.head.getWorldPosition( V() ).y + 0.1;
 
 } );
-const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), up = new THREE.Vector3( 0, 1, 0 );
-function placeLimb( m, a, b ) {
 
-	tmpA.subVectors( b, a ); const len = tmpA.length();
-	m.position.addVectors( a, b ).multiplyScalar( 0.5 );
-	m.quaternion.setFromUnitVectors( up, tmpA.normalize() );
-	m.scale.set( 1, Math.max( len - 0.08, 0.01 ), 1 );
+// realistic scanned head (Lee Perry-Smith, Infinite-Realities, CC BY 3.0), clipped at the neck so it blends into the body
+loader.load( 'assets/LeePerrySmith.glb', gltf => {
 
-}
-let dealerGrip = false; // hands follow the gun when the dealer holds it
-let breathe = 0;
-function updateArms( dt ) {
-
-	for ( const a of arms ) {
-
-		if ( dealerGrip ) dealer.worldToLocal( ( a.s > 0 ? gripMark : foreMark ).getWorldPosition( a.target ) );
-		else a.target.copy( a.rest );
-		a.cur.lerp( a.target, 1 - Math.pow( 0.0005, dt ) );
-		const sh = tmpB.set( a.s * 0.24, 1.24 + breathe, 0.02 );
-		const elbow = new THREE.Vector3().addVectors( sh, a.cur ).multiplyScalar( 0.5 ).add( new THREE.Vector3( a.s * 0.1, - 0.12, - 0.02 ) );
-		placeLimb( a.upper, sh, elbow ); placeLimb( a.lower, elbow, a.cur );
-		a.hand.position.copy( a.cur );
-		if ( ! dealerGrip ) a.hand.rotation.set( 0, 0, 0 ); else a.hand.rotation.set( - 0.6, 0, a.s * 0.8 );
-
-	}
-
-}
-
-// realistic scanned head (Lee Perry-Smith, Infinite-Realities, CC BY 3.0), tinted pale and sickly
-new GLTFLoader().load( 'assets/LeePerrySmith.glb', gltf => {
-
-	const src = gltf.scene.children.find( o => o.isMesh ) || gltf.scene.getObjectByProperty( 'isMesh', true );
+	let src = null; gltf.scene.traverse( o => { if ( o.isMesh && ! src ) src = o; } );
 	if ( ! src ) return;
 	const tl = new THREE.TextureLoader();
 	const map = tl.load( 'assets/Map-COL.jpg' ); map.colorSpace = THREE.SRGBColorSpace;
 	const nrm = tl.load( 'assets/Infinite-Level_02_Tangent_SmoothUV.jpg' );
 	const geo = src.geometry.clone();
 	geo.computeBoundingBox();
-	const bb = geo.boundingBox, size = new THREE.Vector3(); bb.getSize( size );
-	const k = 0.3 / size.y;
+	const bb = geo.boundingBox, size = V(); bb.getSize( size );
 	geo.translate( - ( bb.min.x + bb.max.x ) / 2, - bb.min.y, - ( bb.min.z + bb.max.z ) / 2 );
-	const head = new THREE.Mesh( geo, new THREE.MeshStandardMaterial( { map, normalMap: nrm, normalScale: new THREE.Vector2( 0.9, 0.9 ), color: 0xc9cbbd, roughness: 0.62 } ) );
-	head.scale.setScalar( k ); head.scale.y *= 1.06; // a touch too long
-	head.position.y = - 0.11; neck.visible = false; // the scan's own neck and collarbones disappear into the jacket head.castShadow = head.receiveShadow = true;
-	headPivot.remove( headModel ); headPivot.add( head ); headModel = head;
+	const head = new THREE.Mesh( geo, new THREE.MeshStandardMaterial( { map, normalMap: nrm, color: 0xc4c6b8, roughness: 0.62, clippingPlanes: [ neckClip ], side: THREE.DoubleSide } ) );
+	head.scale.setScalar( 0.33 / size.y );
+	head.position.y = - 0.14; head.position.z = 0.0;
+	head.castShadow = head.receiveShadow = true;
+	headAnchor.add( head ); headModel = head;
 
 } );
 
@@ -587,9 +713,9 @@ async function startRound() {
 	for ( const s of [ 'player', 'dealer' ] ) { G.itemObjs[ s ].forEach( o => scene.remove( o ) ); G.itemObjs[ s ] = []; G.items[ s ] = []; }
 	G.cuffed = { player: false, dealer: false }; G.turn = 'player'; setSaw( false );
 	G.queue = []; G.qi = 0;
-	gunHolder = null; dealerGrip = false;
+	release( 'dealer' ); release( 'player' );
 	await moveGun( POSE.table, 0.4 );
-	if ( ! dealerAlive ) { await lampBlackout( 0.6 ); dealer.visible = true; dealerAlive = true; headPivot.rotation.set( 0, 0, 0 ); dealer.rotation.set( 0, 0, 0 ); }
+	if ( ! dealerAlive ) { await lampBlackout( 0.6 ); dealer.visible = headAnchor.visible = true; dealerAlive = true; }
 	drawHP();
 	say( `라운드 ${G.round}. 체력 ${G.hpMax}.` );
 	await wait( 1.6 );
@@ -677,8 +803,7 @@ async function shoot( shooter, target ) {
 	const shell = G.queue[ G.qi ], isLive = shell === 'live', dmg = G.sawed && isLive ? 2 : 1;
 	const atPlayer = target === 'player';
 	const odds = G.known[ shooter ] ? ( isLive ? 1 : 0 ) : pLive();
-	if ( shooter === 'player' ) await moveGun( atPlayer ? POSE.playerAimSelf : POSE.playerAimDealer, atPlayer ? 1.0 : 0.5 );
-	else await moveGun( atPlayer ? POSE.dealerAimPlayer : POSE.dealerAimSelf, 1.0 );
+	await aimAt( shooter, target === shooter );
 	// the wait before the trigger
 	const hold = 0.8 + odds * 1.4 + Math.random() * 0.8;
 	if ( buzzGain ) buzzGain.gain.setTargetAtTime( 0.0005, actx.currentTime, 0.2 );
@@ -713,11 +838,9 @@ async function shoot( shooter, target ) {
 	}
 	if ( wasSawed ) setSaw( false );
 	// rack the next shell, spent hull flies out
-	sfx.rack();
 	ejectShell( shell );
-	await tween( 0.35, t => { pump.position.x = - 0.07 * Math.sin( t * Math.PI ); } );
-	gunHolder = null; dealerGrip = false;
-	await moveGun( POSE.table, 0.7 );
+	await rackPump( shooter );
+	await putDown( shooter );
 	G.turn = ( ! isLive && target === shooter ) ? shooter : other( shooter );
 	await nextTurn();
 
@@ -759,8 +882,9 @@ async function playerHit( dmg ) {
 	flashEl.style.opacity = '1'; blackEl.style.opacity = '1';
 	sfx.ring();
 	await tween( 0.15, t => { flashEl.style.opacity = String( 1 - t ); } );
-	gunHolder = null; dealerGrip = false;
+	release( 'player' ); release( 'dealer' );
 	gunRoot.position.copy( POSE.table.p ); gunRoot.quaternion.copy( POSE.table.q );
+	lookDown = 0; playerLean = 0;
 	if ( G.hp.player <= 0 ) { G.hp.player = 0; drawHP(); await gameOver(); return true; }
 	say( dmg > 1 ? `실탄. 체력 ${dmg} 손실.` : '실탄. 체력 1 손실.' );
 	for ( let i = 0; i < 3; i ++ ) { sfx.heart( 0.6 ); await wait( 0.7 ); }
@@ -781,9 +905,9 @@ async function dealerHit( dmg, self ) {
 async function roundWon() {
 
 	setPhase( 'busy' );
-	gunHolder = null; dealerGrip = false;
+	release( 'player' ); release( 'dealer' );
 	await lampBlackout( 0.2 );
-	lampPower = 0; dealer.visible = false; dealerAlive = false;
+	lampPower = 0; dealer.visible = headAnchor.visible = false; dealerAlive = false;
 	await wait( 1.0 ); lampPower = 1;
 	await moveGun( POSE.table, 0.4 );
 	if ( G.round >= 3 ) {
@@ -937,9 +1061,8 @@ async function dealerTurn() {
 	const target = pl > 0.5 ? 'player' : pl < 0.5 ? 'dealer' : ( Math.random() < 0.5 ? 'player' : 'dealer' );
 	if ( target === 'player' && has( 'saw' ) >= 0 && ! G.sawed && ( known ? shell === 'live' : pl > 0.6 ) ) await useItem( 'dealer', has( 'saw' ) );
 	// pick up the gun
-	sfx.pick(); gunHolder = 'dealer'; dealerGrip = true;
-	await moveGun( POSE.dealerLift, 0.8 );
-	await wait( 0.5 );
+	await pickUp( 'dealer' );
+	await wait( 0.4 );
 	say( target === 'player' ? '딜러가 총구를 당신에게 겨눕니다.' : '딜러가 총구를 자기 턱에 댑니다.' );
 	await shoot( 'dealer', target );
 
@@ -985,8 +1108,8 @@ renderer.domElement.addEventListener( 'click', e => {
 async function pickUpGun() {
 
 	if ( G.phase !== 'choose' ) return;
-	setPhase( 'busy' ); sfx.pick(); gunHolder = 'player';
-	await moveGun( POSE.lift, 0.6 );
+	setPhase( 'busy' );
+	await pickUp( 'player' );
 	setPhase( 'aim' );
 
 }
@@ -1042,7 +1165,7 @@ dispatchEvent( new Event( 'resize' ) );
 
 // ---------- loop ----------
 const clock = new THREE.Clock();
-const lookTarget = new THREE.Vector3(), headTarget = new THREE.Vector3();
+const lookTarget = new THREE.Vector3();
 renderer.setAnimationLoop( () => {
 
 	const dt = Math.min( clock.getDelta(), 0.05 ), time = clock.elapsedTime;
@@ -1065,24 +1188,50 @@ renderer.setAnimationLoop( () => {
 	// lamp sway + random flicker
 	lamp.rotation.z = Math.sin( time * 0.6 ) * 0.025; lamp.rotation.x = Math.sin( time * 0.45 ) * 0.02;
 	let flick = 1; if ( Math.random() < 0.004 ) flick = 0.3;
-	spot.intensity = 20 * lampPower * flick;
+	spot.intensity = 7 * lampPower * flick;
 	bulbMat.color.setScalar( 0.15 + 0.85 * lampPower * flick );
 
-	// dealer idle: breathing, head slowly follows you, kicks back when shot
-	breathe = Math.sin( time * 1.3 ) * 0.006;
-	torso.scale.x = 1 + breathe * 2;
-	headKick *= Math.pow( 0.02, dt );
-	headTarget.copy( camera.position );
-	headPivot.rotation.y = THREE.MathUtils.lerp( headPivot.rotation.y, Math.atan2( headTarget.x - dealer.position.x, headTarget.z - dealer.position.z ) * 0.6 + Math.sin( time * 0.3 ) * 0.05, 0.05 );
-	headPivot.rotation.x = - 0.08 - headKick * 0.7 + Math.sin( time * 0.21 ) * 0.03;
-	headPivot.rotation.z = Math.sin( time * 0.17 ) * 0.06;
-	updateArms( dt );
-
-	// first-person camera: free-ish look with the mouse, shake on shots
+	// first-person camera: lean in to reach the gun, free-ish look with the mouse, shake on shots
 	shakeAmt *= Math.pow( 0.01, dt );
-	camera.position.set( CAM.x + ( Math.random() - 0.5 ) * shakeAmt, CAM.y + Math.sin( time * 0.9 ) * 0.004 + ( Math.random() - 0.5 ) * shakeAmt, CAM.z );
-	lookTarget.set( LOOK.x + mouse.x * 0.55, LOOK.y - mouse.y * 0.35, LOOK.z );
+	camera.position.set( CAM.x + ( Math.random() - 0.5 ) * shakeAmt, CAM.y - playerLean * 0.24 + Math.sin( time * 0.9 ) * 0.004 + ( Math.random() - 0.5 ) * shakeAmt, CAM.z - playerLean * 0.4 );
+	lookTarget.set( LOOK.x + mouse.x * 0.55, LOOK.y - mouse.y * 0.35 - playerLean * 0.25 - lookDown * 0.45, LOOK.z );
 	camera.lookAt( lookTarget );
+
+	// characters
+	headKick *= Math.pow( 0.03, dt );
+	if ( rigs.dealer && dealer.visible ) {
+
+		const r = rigs.dealer;
+		updateRig( r, dt, dealerLean + Math.sin( time * 1.1 ) * 0.03, 1,
+			s => V().set( ( s === 'Left' ? 1 : - 1 ) * 0.2, TABLE_Y + 0.03, - 0.52 ),
+			( s, arm ) => arm.upper.getWorldPosition( V() ).add( V().set( ( s === 'Left' ? 1 : - 1 ) * 0.5, - 0.55, - 0.45 ) ),
+			rg => { // head follows you, slow sway, snaps back when shot
+
+				const hp = rg.head.getWorldPosition( V() );
+				const yaw = Math.atan2( camera.position.x - hp.x, camera.position.z - hp.z ) + Math.sin( time * 0.3 ) * 0.06;
+				const pitch = Math.atan2( hp.y - camera.position.y, Math.hypot( camera.position.x - hp.x, camera.position.z - hp.z ) );
+				const spineTilt = 0.12 + dealerLean * 0.55;
+				rotateBoneWorld( rg.neck, AX.y, yaw * 0.4 ); rotateBoneWorld( rg.head, AX.y, yaw * 0.5 );
+				rotateBoneWorld( rg.neck, AX.x, ( pitch - spineTilt ) * 0.5 - headKick * 0.4 );
+				rotateBoneWorld( rg.head, AX.x, ( pitch - spineTilt ) * 0.5 - headKick * 0.6 + Math.sin( time * 0.21 ) * 0.04 );
+				rotateBoneWorld( rg.head, new THREE.Vector3( 0, 0, 1 ), Math.sin( time * 0.17 ) * 0.07 );
+
+			} );
+		r.head.getWorldPosition( headAnchor.position );
+		r.head.getWorldQuaternion( headAnchor.quaternion ).multiply( r.headOffset );
+		neckClip.constant = - ( r.neck.getWorldPosition( V() ).y + 0.03 );
+
+	}
+	if ( rigs.player ) {
+
+		const r = rigs.player;
+		playerBody.position.set( camera.position.x, camera.position.y - r.eyeY, camera.position.z + 0.12 + playerLean * 0.12 );
+		updateRig( r, dt, playerLean * 0.5, - 1,
+			s => V().set( ( s === 'Left' ? - 1 : 1 ) * 0.2, camera.position.y - 0.62, camera.position.z - 0.18 ),
+			( s, arm ) => arm.upper.getWorldPosition( V() ).add( V().set( ( s === 'Left' ? - 1 : 1 ) * 0.5, - 0.55, 0.45 ) ),
+			null );
+
+	}
 
 	// hover glow on interactive things
 	const glow = hovered ? 0.18 + Math.sin( time * 6 ) * 0.06 : 0;
@@ -1094,6 +1243,7 @@ renderer.setAnimationLoop( () => {
 } );
 drawHP();
 say( '' );
+window.__dbg = { scene, spot, headAnchor, playerBody, rigs, hold, gripMark, foreMark, barrelMark, portMark, moveGun, POSE, setFinger: v => { FINGER_SIGN = v; }, camera, setLean: v => { dealerLean = v; } };
 </script>
 </body>
 </html>
