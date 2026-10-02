@@ -111,7 +111,7 @@
 		<div class="row">
 			<button id="modeRandom" class="big">랜덤 모드<small>실탄 1~2발 · 위치 랜덤</small></button>
 			<button id="modeCustom" class="big">커스텀 모드<small>실탄/공포탄 직접 설정</small></button>
-			<button id="modeBuck" class="big">벅샷 모드<small>딜러와 대결 · 아이템 · 3라운드</small></button>
+			<button id="modeBuck" class="big">벅샷 모드<small>1인칭 테이블 · 딜러와 대결 · 아이템</small></button>
 		</div>
 		<div id="custom" style="display:none">
 			<div class="step"><span>실탄</span><button id="liveMinus">−</button><b id="liveVal">2</b><button id="livePlus">+</button></div>
@@ -270,8 +270,8 @@ table.receiveShadow = true;
 scene.add( table );
 
 // ---------- revolver ----------
-const steel = new THREE.MeshStandardMaterial( { color: 0xb4b8c0, metalness: 1, roughness: 0.3, roughnessMap: brushTex, envMapIntensity: 1.6 } );
-const darkSteel = new THREE.MeshStandardMaterial( { color: 0x23262b, metalness: 1, roughness: 0.38, roughnessMap: brushTex, envMapIntensity: 1.6 } );
+const steel = new THREE.MeshPhysicalMaterial( { color: 0x9aa0a8, metalness: 1, roughness: 0.22, roughnessMap: brushTex, envMapIntensity: 1.8, clearcoat: 0.6, clearcoatRoughness: 0.15 } );
+const darkSteel = new THREE.MeshPhysicalMaterial( { color: 0x1a1d24, metalness: 1, roughness: 0.3, roughnessMap: brushTex, envMapIntensity: 1.8, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.3, sheenColor: 0x2a3a6a } ); // deep blued finish
 const wood = new THREE.MeshStandardMaterial( { color: 0xffffff, map: gripTex, bumpMap: gripTex, bumpScale: 1.2, roughness: 0.5, metalness: 0.05 } );
 const hole = new THREE.MeshBasicMaterial( { color: 0x000000 } );
 const brass = new THREE.MeshStandardMaterial( { color: 0xe0b050, metalness: 1, roughness: 0.2, envMapIntensity: 1.8 } );
@@ -363,9 +363,13 @@ bore.position.set( 3.455, R_RING, 0 );
 gun.add( bore );
 mesh( new THREE.CylinderGeometry( 0.055, 0.055, 2.3, 12 ).rotateZ( Math.PI / 2 ), steel, 1.85, - 0.12, 0 ); // ejector rod
 mesh( new THREE.SphereGeometry( 0.08, 12, 8 ), steel, 3.0, - 0.12, 0 );
-mesh( new THREE.BoxGeometry( 2.0, 0.34, 0.26 ), steel, 1.6, 0.1, 0 ); // under lug
+const lugS = new THREE.Shape(); // full-length underlug enclosing the ejector rod
+lugS.moveTo( 0.6, R_RING ); lugS.lineTo( 3.42, R_RING ); lugS.lineTo( 3.42, - 0.12 ); lugS.quadraticCurveTo( 3.42, - 0.26, 3.25, - 0.26 ); lugS.lineTo( 0.85, - 0.26 ); lugS.quadraticCurveTo( 0.6, - 0.2, 0.6, 0.05 ); lugS.closePath();
+mesh( extrude( lugS, 0.24, 0.04 ), darkSteel );
+for ( let i = 0; i < 6; i ++ ) mesh( new THREE.BoxGeometry( 0.16, 0.1, 0.13 ), darkSteel, 1.0 + i * 0.42, R_RING + 0.25, 0 ); // vent rib posts
 mesh( new THREE.BoxGeometry( 0.14, 0.14, 0.06 ), darkSteel, 3.3, R_RING + 0.3, 0 ); // front sight
-mesh( new THREE.BoxGeometry( 1.6, 0.04, 0.12 ), darkSteel, 2.4, R_RING + 0.2, 0 ); // rib
+mesh( new THREE.BoxGeometry( 2.8, 0.05, 0.15 ), darkSteel, 2.02, R_RING + 0.32, 0 ); // rib top
+mesh( new THREE.CylinderGeometry( 0.235, 0.235, 2.9, 32 ).rotateZ( Math.PI / 2 ), darkSteel, 2.0, R_RING, 0 ); // blued barrel sleeve
 
 const guard = mesh( new THREE.TorusGeometry( 0.45, 0.05, 10, 32, Math.PI ), darkSteel, - 1.15, - 0.45, 0 );
 guard.rotation.z = Math.PI;
@@ -472,6 +476,7 @@ dealer.add( dealerLight );
 
 // free character: "RobotExpressive" (CC0, Quaternius / Tomás Laulhé) replaces the placeholder figure once it loads
 const proceduralParts = [ dTorso, dHead, grin, ...dealer.children.filter( c => c.material === glowRed ) ];
+let dealerScary = false;
 let dealerModel = null, dealerMixer = null, dealerDead = false;
 const dealerActions = {};
 let dealerCurrent = null;
@@ -492,7 +497,19 @@ new GLTFLoader().load( 'assets/RobotExpressive.glb', gltf => {
 	dealerModel.scale.setScalar( k );
 	dealerModel.position.y = - box.min.y * k;
 	dealerModel.rotation.y = - Math.PI / 2; // face the gun
-	dealerModel.traverse( o => { if ( o.isMesh ) { o.castShadow = true; o.receiveShadow = true; } } );
+	// make the cheerful robot sinister: scorched rusty shell, glowing red eyes, angry face
+	dealerModel.traverse( o => {
+
+		if ( ! o.isMesh ) return;
+		o.castShadow = true; o.receiveShadow = true;
+		const m = o.material.clone(); o.material = m;
+		if ( m.name === 'Main' ) { m.color.set( 0x3a1a12 ); m.roughness = 0.85; m.metalness = 0.4; }
+		else if ( m.name === 'Grey' ) { m.color.set( 0x1c1c1f ); m.roughness = 0.6; m.metalness = 0.8; }
+		else if ( m.name === 'Black' ) { m.color.set( 0x220000 ); m.emissive = new THREE.Color( 0xff1a0a ); m.emissiveIntensity = 2.5; }
+		if ( o.morphTargetDictionary && 'Angry' in o.morphTargetDictionary ) o.morphTargetInfluences[ o.morphTargetDictionary.Angry ] = 1;
+
+	} );
+	dealerScary = true;
 	proceduralParts.forEach( p => p.visible = false );
 	dealer.scale.setScalar( 1 ); dealer.position.y = - 2.6;
 	dealer.add( dealerModel );
@@ -1372,7 +1389,7 @@ function syncCustom() { $( 'liveVal' ).textContent = cfg.live; $( 'blankVal' ).t
 const adjust = d => { cfg.live = Math.max( 1, Math.min( CHAMBERS - 1, cfg.live + d ) ); syncCustom(); };
 $( 'startBtn' ).onclick = () => { audio(); showMenu( true ); };
 $( 'modeRandom' ).onclick = () => beginGame( 'random' );
-$( 'modeBuck' ).onclick = () => beginGame( 'buckshot' );
+$( 'modeBuck' ).onclick = () => { location.href = 'buckshot.html'; }; // full first-person Buckshot scene
 $( 'modeCustom' ).onclick = () => { customEl.style.display = 'flex'; syncCustom(); };
 $( 'liveMinus' ).onclick = () => adjust( - 1 );
 $( 'livePlus' ).onclick = () => adjust( 1 );
@@ -1457,6 +1474,7 @@ renderer.setAnimationLoop( () => {
 	cyl.rotation.x = rot;
 	dealer.visible = cfg.mode === 'buckshot';
 	if ( dealerMixer ) dealerMixer.update( dt );
+	if ( dealerScary && dealerLight.intensity < 100 ) dealerLight.intensity = 50 + Math.random() * 30 * ( Math.random() < 0.08 ? 0 : 1 );
 
 	const T = tension();
 	if ( actx && ! drone ) { // low drone that swells with the odds

@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buckshot</title>
+<style>
+	:root { --fg: #d8d4c8; --red: #b8322a; --lcd: #7dff9a; }
+	* { box-sizing: border-box; }
+	html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--fg); font-family: "Courier New", ui-monospace, monospace; }
+	canvas { display: block; }
+	#grain { position: fixed; inset: -50%; pointer-events: none; opacity: .13; mix-blend-mode: overlay; z-index: 1;
+		background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+		animation: grain .4s steps(4) infinite; }
+	@keyframes grain { 0% { transform: translate(0,0); } 25% { transform: translate(-5%,4%); } 50% { transform: translate(4%,-6%); } 75% { transform: translate(-3%,-2%); } 100% { transform: translate(0,0); } }
+	#vig { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.9) 100%); }
+	#hud { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+	#top { position: absolute; left: 16px; top: 14px; font-size: 14px; letter-spacing: .25em; text-shadow: 0 0 6px #000; line-height: 1.7; }
+	#top b { color: #fff; }
+	#tr { position: absolute; right: 16px; top: 14px; display: flex; gap: 8px; }
+	#tr button, #tr a { pointer-events: auto; font: inherit; font-size: 13px; padding: 7px 11px; border-radius: 4px; border: 1px solid #555; background: rgba(10,10,10,.7); color: var(--fg); cursor: pointer; text-decoration: none; }
+	#sub { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(92vw, 820px); text-align: center; font-size: clamp(15px, 2.2vw, 20px); letter-spacing: .08em; text-shadow: 0 0 8px #000, 0 0 2px #000; min-height: 2.6em; }
+	#hint { position: absolute; left: 50%; bottom: 66px; transform: translateX(-50%); font-size: 13px; opacity: .7; letter-spacing: .1em; text-shadow: 0 0 6px #000; white-space: nowrap; }
+	#choice { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: none; gap: 14px; }
+	#choice.show { display: flex; }
+	#choice button { pointer-events: auto; font: inherit; font-weight: 700; letter-spacing: .15em; font-size: 15px; padding: 12px 24px; border: 1px solid #777; background: rgba(15,12,10,.85); color: var(--fg); cursor: pointer; }
+	#choice button:hover { background: #2a201c; }
+	#choice #cDealer { border-color: var(--red); color: #ffb3aa; }
+	#tip { position: fixed; z-index: 3; pointer-events: none; padding: 6px 10px; font-size: 12px; background: rgba(0,0,0,.85); border: 1px solid #555; display: none; max-width: 240px; line-height: 1.5; }
+	#black { position: fixed; inset: 0; z-index: 4; background: #000; opacity: 0; pointer-events: none; }
+	#flash { position: fixed; inset: 0; z-index: 4; background: #fff; opacity: 0; pointer-events: none; }
+	.screen { position: fixed; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 16px; background: rgba(0,0,0,.82); }
+	.screen.hide { display: none; }
+	.screen h1 { margin: 0; font-size: clamp(38px, 10vw, 96px); letter-spacing: .3em; color: #e9e2d2; text-shadow: 0 0 30px rgba(190,40,30,.6); }
+	.screen p { margin: 0; max-width: 560px; line-height: 1.7; font-size: 14px; opacity: .85; }
+	.screen button, .screen a { font: inherit; font-weight: 700; letter-spacing: .2em; font-size: 17px; padding: 14px 34px; border: 1px solid #888; background: #120f0d; color: var(--fg); cursor: pointer; text-decoration: none; }
+	.screen .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+	#ecg { width: min(80vw, 700px); height: 80px; }
+	small.credit { font-size: 11px; opacity: .5; max-width: 600px; line-height: 1.6; }
+</style>
+<script type="importmap">
+{ "imports": {
+	"three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+	"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="vig"></div>
+<div id="grain"></div>
+<div id="hud">
+	<div id="top">ROUND <b id="round">1</b> / 3<br><span id="turn"></span></div>
+	<div id="tr"><a href="index.html">러시안 룰렛</a><button id="fs" title="전체화면 (F)">⛶</button></div>
+	<div id="sub"></div>
+	<div id="hint"></div>
+	<div id="choice"><button id="cDealer">딜러를 쏜다</button><button id="cSelf">나를 쏜다</button></div>
+</div>
+<div id="tip"></div>
+<div id="flash"></div>
+<div id="black"></div>
+<div id="start" class="screen">
+	<h1>BUCKSHOT</h1>
+	<p>딜러와 마주 앉아 산탄총 한 자루로 승부합니다.<br>장전된 실탄과 공포탄의 수만 공개됩니다. 순서는 알 수 없습니다.<br>총을 클릭해 집은 뒤, 딜러를 쏠지 자신을 쏠지 고르세요.<br>자신에게 공포탄을 쏘면 한 번 더 할 수 있습니다.</p>
+	<div class="row"><button id="go">시작</button><a href="index.html">러시안 룰렛으로</a></div>
+	<small class="credit">팬메이드 오마주입니다. 딜러 얼굴: Lee Perry-Smith 헤드 스캔 (Infinite-Realities, CC BY 3.0)</small>
+</div>
+<div id="over" class="screen hide">
+	<canvas id="ecg" width="700" height="80"></canvas>
+	<h1 id="overTitle">사망</h1>
+	<p id="overText"></p>
+	<div class="row"><button id="again">다시 하기</button><a href="index.html">러시안 룰렛으로</a></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById( id );
+const subEl = $( 'sub' ), hintEl = $( 'hint' ), turnEl = $( 'turn' ), roundEl = $( 'round' ), tipEl = $( 'tip' );
+const choiceEl = $( 'choice' ), blackEl = $( 'black' ), flashEl = $( 'flash' );
+const say = t => { subEl.textContent = t; };
+const hint = t => { hintEl.textContent = t || ''; };
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer( { antialias: true } );
+renderer.setPixelRatio( Math.min( devicePixelRatio, 2 ) );
+renderer.setSize( innerWidth, innerHeight );
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.prepend( renderer.domElement );
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color( 0x020202 );
+scene.fog = new THREE.FogExp2( 0x030303, 0.16 );
+scene.environment = new THREE.PMREMGenerator( renderer ).fromScene( new RoomEnvironment(), 0.04 ).texture;
+scene.environmentIntensity = 0.12;
+
+const CAM = new THREE.Vector3( 0, 1.3, 1.3 );
+const LOOK = new THREE.Vector3( 0, 0.9, - 0.6 );
+const camera = new THREE.PerspectiveCamera( 55, innerWidth / innerHeight, 0.02, 40 );
+camera.position.copy( CAM );
+
+// ---------- procedural textures ----------
+function canvasTex( w, h, draw, srgb = true, rep = 1 ) {
+
+	const c = document.createElement( 'canvas' ); c.width = w; c.height = h;
+	draw( c.getContext( '2d' ), w, h );
+	const t = new THREE.CanvasTexture( c );
+	t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set( rep, rep ); t.anisotropy = 8;
+	if ( srgb ) t.colorSpace = THREE.SRGBColorSpace;
+	return t;
+
+}
+const speckle = ( g, w, h, n, a ) => { for ( let i = 0; i < n; i ++ ) { const v = Math.random() * 255 | 0; g.fillStyle = `rgba(${v},${v},${v},${Math.random() * a})`; g.fillRect( Math.random() * w, Math.random() * h, 1 + Math.random() * 3, 1 + Math.random() * 3 ); } };
+const grime = ( g, w, h, n ) => { for ( let i = 0; i < n; i ++ ) { const r = 20 + Math.random() * 120, x = Math.random() * w, y = Math.random() * h; const gr = g.createRadialGradient( x, y, 0, x, y, r ); gr.addColorStop( 0, `rgba(20,14,8,${Math.random() * 0.35})` ); gr.addColorStop( 1, 'rgba(0,0,0,0)' ); g.fillStyle = gr; g.fillRect( x - r, y - r, r * 2, r * 2 ); } };
+const tableTex = canvasTex( 1024, 1024, ( g, w, h ) => {
+
+	g.fillStyle = '#3a4238'; g.fillRect( 0, 0, w, h );
+	speckle( g, w, h, 30000, 0.12 ); grime( g, w, h, 110 );
+	g.strokeStyle = 'rgba(210,200,170,.08)';
+	for ( let i = 0; i < 160; i ++ ) { g.lineWidth = Math.random() * 1.5; g.beginPath(); const x = Math.random() * w, y = Math.random() * h; g.moveTo( x, y ); g.lineTo( x + ( Math.random() - 0.5 ) * 200, y + ( Math.random() - 0.5 ) * 60 ); g.stroke(); }
+
+} );
+const wallTex = canvasTex( 512, 512, ( g, w, h ) => {
+
+	g.fillStyle = '#5b5e58'; g.fillRect( 0, 0, w, h );
+	g.strokeStyle = 'rgba(20,20,18,.7)'; g.lineWidth = 3;
+	for ( let y = 0; y <= h; y += 64 ) { g.beginPath(); g.moveTo( 0, y ); g.lineTo( w, y ); g.stroke(); }
+	for ( let x = 0; x <= w; x += 64 ) { g.beginPath(); g.moveTo( x, 0 ); g.lineTo( x, h ); g.stroke(); }
+	speckle( g, w, h, 12000, 0.15 ); grime( g, w, h, 40 );
+	for ( let i = 0; i < 25; i ++ ) { g.fillStyle = `rgba(40,25,10,${Math.random() * 0.3})`; const x = Math.random() * w; g.fillRect( x, Math.random() * h * 0.5, 2 + Math.random() * 4, 80 + Math.random() * 240 ); }
+
+}, true, 4 );
+const floorTex = canvasTex( 512, 512, ( g, w, h ) => {
+
+	for ( let y = 0; y < 8; y ++ ) for ( let x = 0; x < 8; x ++ ) { g.fillStyle = ( x + y ) % 2 ? '#2b2b28' : '#8a8676'; g.fillRect( x * 64, y * 64, 64, 64 ); }
+	speckle( g, w, h, 20000, 0.25 ); grime( g, w, h, 90 );
+
+}, true, 5 );
+const woodTex = canvasTex( 512, 128, ( g, w, h ) => {
+
+	g.fillStyle = '#4a2a14'; g.fillRect( 0, 0, w, h );
+	for ( let i = 0; i < 120; i ++ ) { g.strokeStyle = `rgba(15,6,2,${0.05 + Math.random() * 0.2})`; g.lineWidth = 0.5 + Math.random() * 2; const y = Math.random() * h; g.beginPath(); g.moveTo( 0, y ); for ( let x = 0; x <= w; x += 32 ) g.lineTo( x, y + Math.sin( x * 0.02 + i ) * 3 ); g.stroke(); }
+
+} );
+const brushTex = canvasTex( 256, 256, ( g, w, h ) => {
+
+	g.fillStyle = '#777'; g.fillRect( 0, 0, w, h );
+	for ( let i = 0; i < 1500; i ++ ) { const v = 90 + Math.random() * 90 | 0; g.strokeStyle = `rgba(${v},${v},${v},.5)`; const y = Math.random() * h, x = Math.random() * w; g.beginPath(); g.moveTo( x, y ); g.lineTo( x + 30 + Math.random() * 80, y ); g.stroke(); }
+
+}, false );
+const soft = stops => canvasTex( 128, 128, g => { const gr = g.createRadialGradient( 64, 64, 0, 64, 64, 64 ); stops.forEach( ( [ o, c ] ) => gr.addColorStop( o, c ) ); g.fillStyle = gr; g.fillRect( 0, 0, 128, 128 ); } );
+const glowTex = soft( [ [ 0, 'rgba(255,255,255,1)' ], [ 0.25, 'rgba(255,200,90,.9)' ], [ 1, 'rgba(255,90,0,0)' ] ] );
+const smokeTex = soft( [ [ 0, 'rgba(190,190,190,.8)' ], [ 0.5, 'rgba(140,140,140,.35)' ], [ 1, 'rgba(120,120,120,0)' ] ] );
+
+// ---------- materials ----------
+const M = {
+	table: new THREE.MeshStandardMaterial( { map: tableTex, roughness: 0.9 } ),
+	wall: new THREE.MeshStandardMaterial( { map: wallTex, roughness: 0.95 } ),
+	floor: new THREE.MeshStandardMaterial( { map: floorTex, roughness: 0.8 } ),
+	metal: new THREE.MeshPhysicalMaterial( { color: 0x2a2d33, metalness: 1, roughness: 0.32, roughnessMap: brushTex, clearcoat: 0.8, clearcoatRoughness: 0.2, envMapIntensity: 2 } ),
+	metalLight: new THREE.MeshStandardMaterial( { color: 0x8a8d92, metalness: 1, roughness: 0.35, roughnessMap: brushTex, envMapIntensity: 2 } ),
+	wood: new THREE.MeshStandardMaterial( { map: woodTex, roughness: 0.55 } ),
+	black: new THREE.MeshStandardMaterial( { color: 0x0b0b0b, roughness: 0.7 } ),
+	plastic: new THREE.MeshStandardMaterial( { color: 0x1d1f1c, roughness: 0.6 } ),
+	suit: new THREE.MeshStandardMaterial( { color: 0x121215, roughness: 0.92 } ),
+	skin: new THREE.MeshStandardMaterial( { color: 0xb9b3a6, roughness: 0.6 } ),
+	live: new THREE.MeshStandardMaterial( { color: 0xb3201a, roughness: 0.45 } ),
+	blank: new THREE.MeshStandardMaterial( { color: 0x2d4e9a, roughness: 0.45 } ),
+	brass: new THREE.MeshStandardMaterial( { color: 0xc9973f, metalness: 1, roughness: 0.25, envMapIntensity: 2 } )
+};
+function mesh( geo, mat, parent, x = 0, y = 0, z = 0 ) {
+
+	const m = new THREE.Mesh( geo, mat );
+	m.position.set( x, y, z ); m.castShadow = m.receiveShadow = true;
+	parent.add( m ); return m;
+
+}
+
+// ---------- room ----------
+const room = new THREE.Mesh( new THREE.BoxGeometry( 7, 3.4, 7 ), [ M.wall, M.wall, M.wall, M.floor, M.wall, M.wall ] );
+room.material = [ M.wall, M.wall, M.black, M.floor, M.wall, M.wall ].map( m => { const c = m.clone(); c.side = THREE.BackSide; return c; } );
+room.position.set( 0, 1.7, - 0.6 );
+room.receiveShadow = true;
+scene.add( room );
+// pipes along the back wall
+for ( let i = 0; i < 3; i ++ ) { const p = mesh( new THREE.CylinderGeometry( 0.04 + i * 0.01, 0.04 + i * 0.01, 7, 12 ), M.metal, scene, 0, 2.6 + i * 0.12, - 4.0 ); p.rotation.z = Math.PI / 2; }
+mesh( new THREE.BoxGeometry( 1.0, 2.1, 0.08 ), new THREE.MeshStandardMaterial( { color: 0x2a2320, roughness: 0.8 } ), scene, 2.2, 1.05, - 4.05 ); // door
+
+// table
+const tableGroup = new THREE.Group(); scene.add( tableGroup );
+mesh( new THREE.BoxGeometry( 1.9, 0.06, 1.4 ), M.table, tableGroup, 0, 0.75, 0 );
+for ( const [ x, z ] of [ [ - 0.85, - 0.6 ], [ 0.85, - 0.6 ], [ - 0.85, 0.6 ], [ 0.85, 0.6 ] ] ) mesh( new THREE.BoxGeometry( 0.07, 0.72, 0.07 ), M.metal, tableGroup, x, 0.36, z );
+const TABLE_Y = 0.78;
+
+// hanging lamp
+const lamp = new THREE.Group(); lamp.position.set( 0, 3.4, - 0.1 ); scene.add( lamp );
+mesh( new THREE.CylinderGeometry( 0.006, 0.006, 1.2, 6 ), M.black, lamp, 0, - 0.6, 0 );
+const shade = mesh( new THREE.ConeGeometry( 0.28, 0.2, 32, 1, true ), new THREE.MeshStandardMaterial( { color: 0x2b3b2c, metalness: 0.6, roughness: 0.5, side: THREE.DoubleSide } ), lamp, 0, - 1.3, 0 );
+shade.castShadow = false;
+const bulbMat = new THREE.MeshBasicMaterial( { color: 0xfff1c9 } );
+mesh( new THREE.SphereGeometry( 0.05, 16, 12 ), bulbMat, lamp, 0, - 1.38, 0 ).castShadow = false;
+const spot = new THREE.SpotLight( 0xffe2b0, 20, 6, 0.9, 0.6, 1.6 );
+spot.position.set( 0, - 1.36, 0 );
+spot.castShadow = true; spot.shadow.mapSize.set( 2048, 2048 ); spot.shadow.bias = - 0.0005; spot.shadow.radius = 4;
+lamp.add( spot ); spot.target.position.set( 0, - 3, 0 ); lamp.add( spot.target );
+const fill = new THREE.HemisphereLight( 0x3a4a5a, 0x050505, 0.12 ); scene.add( fill );
+const rim = new THREE.PointLight( 0x8a2a1a, 1.2, 5, 2 ); rim.position.set( 0.4, 1.9, - 2.2 ); scene.add( rim );
+let lampPower = 1; // 0..1, used for flicker and blackouts
+
+// health displays (defibrillator-style LCDs)
+function makeDisplay( label ) {
+
+	const g = new THREE.Group();
+	mesh( new THREE.BoxGeometry( 0.26, 0.07, 0.14 ), M.plastic, g, 0, 0.035, 0 );
+	const c = document.createElement( 'canvas' ); c.width = 256; c.height = 96;
+	const tex = new THREE.CanvasTexture( c ); tex.colorSpace = THREE.SRGBColorSpace;
+	const scr = new THREE.Mesh( new THREE.PlaneGeometry( 0.22, 0.08 ), new THREE.MeshBasicMaterial( { map: tex, toneMapped: false } ) );
+	scr.rotation.x = - Math.PI / 2 + 0.5; scr.position.set( 0, 0.075, 0.0 ); g.add( scr );
+	g.draw = ( hp, max ) => {
+
+		const x = c.getContext( '2d' );
+		x.fillStyle = '#031208'; x.fillRect( 0, 0, 256, 96 );
+		x.fillStyle = '#7dff9a'; x.font = 'bold 20px Courier New'; x.fillText( label, 10, 26 );
+		for ( let i = 0; i < max; i ++ ) {
+
+			x.fillStyle = i < hp ? '#7dff9a' : '#0d3a1a';
+			const bx = 12 + i * 40;
+			x.beginPath(); x.moveTo( bx + 18, 36 ); x.lineTo( bx + 6, 64 ); x.lineTo( bx + 16, 64 ); x.lineTo( bx + 10, 90 ); x.lineTo( bx + 30, 56 ); x.lineTo( bx + 19, 56 ); x.lineTo( bx + 26, 36 ); x.closePath(); x.fill();
+
+		}
+		tex.needsUpdate = true;
+
+	};
+	scene.add( g );
+	return g;
+
+}
+const dispPlayer = makeDisplay( 'YOU' ); dispPlayer.position.set( - 0.2, TABLE_Y, 0.6 ); dispPlayer.scale.setScalar( 0.75 );
+const dispDealer = makeDisplay( 'DEALER' ); dispDealer.position.set( 0, TABLE_Y, - 0.6 );
+
+// ---------- shotgun (procedural pump-action, local +x = muzzle) ----------
+const gunRoot = new THREE.Group(); scene.add( gunRoot );
+const gun = new THREE.Group(); gun.rotation.y = - Math.PI / 2; gunRoot.add( gun ); // gunRoot's +z points down the barrel
+mesh( new THREE.BoxGeometry( 0.24, 0.075, 0.05 ), M.metal, gun, 0, 0, 0 ); // receiver
+mesh( new THREE.BoxGeometry( 0.07, 0.025, 0.052 ), M.black, gun, 0.02, 0.0, 0 ); // ejection port
+const front = new THREE.Group(); front.position.x = 0.12; gun.add( front ); // barrel + magazine (scaled when sawed off)
+const barrel = mesh( new THREE.CylinderGeometry( 0.014, 0.0145, 0.56, 20 ).rotateZ( Math.PI / 2 ), M.metal, front, 0.28, 0.022, 0 );
+mesh( new THREE.CylinderGeometry( 0.013, 0.013, 0.46, 16 ).rotateZ( Math.PI / 2 ), M.metal, front, 0.23, - 0.016, 0 );
+const boreRing = mesh( new THREE.TorusGeometry( 0.011, 0.003, 6, 16 ).rotateY( Math.PI / 2 ), M.black, front, 0.56, 0.022, 0 );
+mesh( new THREE.SphereGeometry( 0.004, 8, 6 ), M.brass, front, 0.54, 0.038, 0 ); // bead sight
+const bore = new THREE.Mesh( new THREE.CircleGeometry( 0.011, 16 ).rotateY( Math.PI / 2 ), new THREE.MeshBasicMaterial( { color: 0x000000 } ) ); bore.position.set( 0.561, 0.022, 0 ); front.add( bore );
+const muzzle = new THREE.Object3D(); muzzle.position.set( 0.58, 0.022, 0 ); front.add( muzzle );
+const pump = new THREE.Group(); gun.add( pump );
+const fore = mesh( new THREE.CylinderGeometry( 0.024, 0.024, 0.2, 16 ).rotateZ( Math.PI / 2 ), M.wood, pump, 0.3, - 0.012, 0 );
+for ( let i = 0; i < 6; i ++ ) mesh( new THREE.TorusGeometry( 0.0245, 0.002, 4, 16 ).rotateY( Math.PI / 2 ), M.black, pump, 0.23 + i * 0.028, - 0.012, 0 );
+const stockShape = new THREE.Shape();
+stockShape.moveTo( - 0.12, 0.035 ); stockShape.lineTo( - 0.22, 0.03 ); stockShape.lineTo( - 0.52, 0.01 ); stockShape.lineTo( - 0.54, - 0.13 ); stockShape.lineTo( - 0.47, - 0.135 );
+stockShape.quadraticCurveTo( - 0.26, - 0.06, - 0.2, - 0.085 ); stockShape.lineTo( - 0.16, - 0.09 ); stockShape.quadraticCurveTo( - 0.15, - 0.04, - 0.12, - 0.035 ); stockShape.closePath();
+const stockGeo = new THREE.ExtrudeGeometry( stockShape, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 3 } ); stockGeo.translate( 0, 0, - 0.02 );
+mesh( stockGeo, M.wood, gun );
+mesh( new THREE.BoxGeometry( 0.012, 0.15, 0.046 ), M.black, gun, - 0.535, - 0.06, 0 ).rotation.z = 0.12; // butt pad
+const guard = mesh( new THREE.TorusGeometry( 0.026, 0.004, 6, 20, Math.PI ), M.metal, gun, - 0.065, - 0.038, 0 ); guard.rotation.z = Math.PI;
+const trig = mesh( new THREE.BoxGeometry( 0.006, 0.03, 0.008 ), M.metalLight, gun, - 0.06, - 0.05, 0 ); trig.rotation.z = 0.3;
+const gripMark = new THREE.Object3D(); gripMark.position.set( - 0.17, - 0.06, 0 ); gun.add( gripMark );
+const foreMark = new THREE.Object3D(); foreMark.position.set( 0.3, - 0.03, 0 ); pump.add( foreMark );
+const portMark = new THREE.Object3D(); portMark.position.set( 0.0, - 0.045, 0 ); gun.add( portMark );
+
+// muzzle flash + light
+const flashSprite = new THREE.Sprite( new THREE.SpriteMaterial( { map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true } ) );
+flashSprite.visible = false; scene.add( flashSprite );
+const flashLight = new THREE.PointLight( 0xffa040, 0, 6, 2 ); scene.add( flashLight );
+
+// gun poses: position + point the barrel at a target (+ roll around the barrel)
+const dummy = new THREE.Object3D();
+function pose( p, target, roll = 0 ) {
+
+	dummy.position.copy( p ); dummy.lookAt( target ); dummy.rotateZ( roll );
+	return { p: p.clone(), q: dummy.quaternion.clone() };
+
+}
+const HEAD = new THREE.Vector3( 0, 1.5, - 1.15 );
+const POSE = {
+	table: pose( new THREE.Vector3( 0.02, TABLE_Y + 0.03, 0.05 ), new THREE.Vector3( 1, TABLE_Y + 0.03, 0.15 ), Math.PI / 2 ),
+	lift: pose( new THREE.Vector3( 0.1, 1.0, 0.75 ), new THREE.Vector3( 0, 1.0, - 1 ) ),
+	playerAimDealer: pose( new THREE.Vector3( 0.16, 1.07, 0.85 ), new THREE.Vector3( 0, 1.38, - 1.15 ) ),
+	playerAimSelf: pose( new THREE.Vector3( 0.03, 1.18, 0.5 ), CAM.clone(), 0.2 ),
+	dealerAimPlayer: pose( new THREE.Vector3( 0.06, 1.12, - 0.62 ), CAM.clone() ),
+	dealerLift: pose( new THREE.Vector3( 0.05, 1.0, - 0.55 ), new THREE.Vector3( 0, 1.1, 1 ) ),
+	dealerAimSelf: pose( new THREE.Vector3( 0.09, 1.02, - 0.58 ), HEAD.clone().add( new THREE.Vector3( 0, - 0.06, 0 ) ), 0.4 )
+};
+gunRoot.position.copy( POSE.table.p ); gunRoot.quaternion.copy( POSE.table.q );
+let gunHolder = null; // null | 'player' | 'dealer'
+function moveGun( to, dur = 0.8 ) {
+
+	const p0 = gunRoot.position.clone(), q0 = gunRoot.quaternion.clone();
+	return tween( dur, t => { gunRoot.position.lerpVectors( p0, to.p, t ); gunRoot.quaternion.slerpQuaternions( q0, to.q, t ); }, ease.inOut );
+
+}
+
+// ---------- dealer ----------
+const dealer = new THREE.Group(); dealer.position.set( 0, 0, - 1.15 ); scene.add( dealer );
+const torso = mesh( new THREE.CylinderGeometry( 0.24, 0.17, 0.62, 24 ), M.suit, dealer, 0, 1.03, 0 ); torso.scale.z = 0.6; // V-shaped jacket
+for ( const s of [ - 1, 1 ] ) mesh( new THREE.SphereGeometry( 0.075, 16, 12 ), M.suit, dealer, s * 0.215, 1.255, 0 ).scale.set( 1.1, 0.8, 0.9 ); // shoulders
+mesh( new THREE.BoxGeometry( 0.12, 0.16, 0.02 ), new THREE.MeshStandardMaterial( { color: 0x6b675e, roughness: 0.8 } ), dealer, 0, 1.19, 0.125 ).rotation.x = - 0.1; // grimy shirt
+const neck = mesh( new THREE.CylinderGeometry( 0.048, 0.056, 0.12, 16 ), M.skin, dealer, 0, 1.32, 0.0 );
+const headPivot = new THREE.Group(); headPivot.position.set( 0, 1.36, 0.0 ); dealer.add( headPivot );
+let headModel = new THREE.Mesh( new THREE.SphereGeometry( 0.11, 24, 16 ), M.skin ); headModel.position.y = 0.1; headModel.scale.set( 0.9, 1.2, 1 ); headPivot.add( headModel );
+
+// arms: shoulder -> elbow -> hand, re-solved every frame so the hands can grab the gun
+const arms = [ - 1, 1 ].map( s => {
+
+	const upper = mesh( new THREE.CapsuleGeometry( 0.045, 1, 6, 12 ), M.suit, dealer );
+	const lower = mesh( new THREE.CapsuleGeometry( 0.04, 1, 6, 12 ), M.suit, dealer );
+	const hand = new THREE.Group(); dealer.add( hand );
+	mesh( new THREE.BoxGeometry( 0.07, 0.022, 0.085 ), M.skin, hand, 0, 0, 0 );
+	for ( let f = 0; f < 4; f ++ ) {
+
+		const fx = - 0.027 + f * 0.018;
+		const p1 = mesh( new THREE.CapsuleGeometry( 0.0065, 0.06, 4, 8 ), M.skin, hand, fx, - 0.004, 0.08 ); p1.rotation.x = Math.PI / 2 + 0.15;
+		const p2 = mesh( new THREE.CapsuleGeometry( 0.006, 0.045, 4, 8 ), M.skin, hand, fx, - 0.018, 0.135 ); p2.rotation.x = Math.PI / 2 + 0.7;
+
+	}
+	mesh( new THREE.CapsuleGeometry( 0.007, 0.04, 4, 8 ), M.skin, hand, s * - 0.045, - 0.002, 0.03 ).rotation.set( Math.PI / 2, 0, s * 0.7 ); // thumb
+	const rest = new THREE.Vector3( s * 0.19, TABLE_Y + 0.015, 0.68 ); // in dealer space
+	return { s, upper, lower, hand, rest, target: rest.clone(), cur: rest.clone() };
+
+} );
+const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), up = new THREE.Vector3( 0, 1, 0 );
+function placeLimb( m, a, b ) {
+
+	tmpA.subVectors( b, a ); const len = tmpA.length();
+	m.position.addVectors( a, b ).multiplyScalar( 0.5 );
+	m.quaternion.setFromUnitVectors( up, tmpA.normalize() );
+	m.scale.set( 1, Math.max( len - 0.08, 0.01 ), 1 );
+
+}
+let dealerGrip = false; // hands follow the gun when the dealer holds it
+let breathe = 0;
+function updateArms( dt ) {
+
+	for ( const a of arms ) {
+
+		if ( dealerGrip ) dealer.worldToLocal( ( a.s > 0 ? gripMark : foreMark ).getWorldPosition( a.target ) );
+		else a.target.copy( a.rest );
+		a.cur.lerp( a.target, 1 - Math.pow( 0.0005, dt ) );
+		const sh = tmpB.set( a.s * 0.24, 1.24 + breathe, 0.02 );
+		const elbow = new THREE.Vector3().addVectors( sh, a.cur ).multiplyScalar( 0.5 ).add( new THREE.Vector3( a.s * 0.1, - 0.12, - 0.02 ) );
+		placeLimb( a.upper, sh, elbow ); placeLimb( a.lower, elbow, a.cur );
+		a.hand.position.copy( a.cur );
+		if ( ! dealerGrip ) a.hand.rotation.set( 0, 0, 0 ); else a.hand.rotation.set( - 0.6, 0, a.s * 0.8 );
+
+	}
+
+}
+
+// realistic scanned head (Lee Perry-Smith, Infinite-Realities, CC BY 3.0), tinted pale and sickly
+new GLTFLoader().load( 'assets/LeePerrySmith.glb', gltf => {
+
+	const src = gltf.scene.children.find( o => o.isMesh ) || gltf.scene.getObjectByProperty( 'isMesh', true );
+	if ( ! src ) return;
+	const tl = new THREE.TextureLoader();
+	const map = tl.load( 'assets/Map-COL.jpg' ); map.colorSpace = THREE.SRGBColorSpace;
+	const nrm = tl.load( 'assets/Infinite-Level_02_Tangent_SmoothUV.jpg' );
+	const geo = src.geometry.clone();
+	geo.computeBoundingBox();
+	const bb = geo.boundingBox, size = new THREE.Vector3(); bb.getSize( size );
+	const k = 0.3 / size.y;
+	geo.translate( - ( bb.min.x + bb.max.x ) / 2, - bb.min.y, - ( bb.min.z + bb.max.z ) / 2 );
+	const head = new THREE.Mesh( geo, new THREE.MeshStandardMaterial( { map, normalMap: nrm, normalScale: new THREE.Vector2( 0.9, 0.9 ), color: 0xc9cbbd, roughness: 0.62 } ) );
+	head.scale.setScalar( k ); head.scale.y *= 1.06; // a touch too long
+	head.position.y = - 0.11; neck.visible = false; // the scan's own neck and collarbones disappear into the jacket head.castShadow = head.receiveShadow = true;
+	headPivot.remove( headModel ); headPivot.add( head ); headModel = head;
+
+} );
+
+let dealerAlive = true, headKick = 0;
+
+// ---------- particles ----------
+const parts = [];
+function emit( tex, blend, pos, vel, size, grow, life, op ) {
+
+	const sp = new THREE.Sprite( new THREE.SpriteMaterial( { map: tex, blending: blend, transparent: true, depthWrite: false, opacity: op } ) );
+	sp.position.copy( pos ); sp.scale.setScalar( size ); scene.add( sp );
+	parts.push( { sp, vel, grow, life, age: 0, op } );
+
+}
+
+// ---------- shells & items ----------
+const shellGeo = new THREE.CylinderGeometry( 0.016, 0.016, 0.075, 16 ), baseGeo = new THREE.CylinderGeometry( 0.017, 0.017, 0.016, 16 );
+function makeShell( kind ) {
+
+	const g = new THREE.Group();
+	mesh( shellGeo, kind === 'live' ? M.live : M.blank, g, 0, 0.0455, 0 );
+	mesh( baseGeo, M.brass, g, 0, 0.008, 0 );
+	scene.add( g ); return g;
+
+}
+const ITEMS = {
+	magnifier: { name: '돋보기', desc: '현재 약실의 탄을 확인합니다.' },
+	beer: { name: '맥주', desc: '총을 펌프질해 현재 탄을 배출합니다.' },
+	cigarette: { name: '담배', desc: '체력을 1 회복합니다.' },
+	handcuffs: { name: '수갑', desc: '상대의 다음 턴을 건너뛰게 합니다.' },
+	saw: { name: '쇠톱', desc: '총신을 잘라 이번 발사의 피해를 2배로 만듭니다.' },
+	inverter: { name: '인버터', desc: '현재 탄의 극성을 뒤집습니다 (실탄 ↔ 공포탄).' },
+	medicine: { name: '만료된 약', desc: '50% 확률로 체력 +2, 아니면 체력 -1.' }
+};
+const ITEM_KEYS = Object.keys( ITEMS );
+function makeItem( k ) {
+
+	const g = new THREE.Group();
+	const m = ( geo, mat, x, y, z ) => mesh( geo, mat, g, x, y, z );
+	if ( k === 'magnifier' ) {
+
+		const r = m( new THREE.TorusGeometry( 0.035, 0.006, 8, 24 ), M.black, 0, 0.007, 0 ); r.rotation.x = Math.PI / 2;
+		const gl = m( new THREE.CircleGeometry( 0.034, 24 ), new THREE.MeshPhysicalMaterial( { color: 0xddeeff, transmission: 0.8, roughness: 0.05, transparent: true, opacity: 0.5 } ), 0, 0.008, 0 ); gl.rotation.x = - Math.PI / 2;
+		m( new THREE.CylinderGeometry( 0.007, 0.008, 0.07, 10 ).rotateZ( Math.PI / 2 ), M.wood, 0.07, 0.008, 0 );
+
+	} else if ( k === 'beer' ) {
+
+		m( new THREE.CylinderGeometry( 0.026, 0.026, 0.11, 20 ), new THREE.MeshStandardMaterial( { color: 0x2c6b2e, metalness: 0.7, roughness: 0.35 } ), 0, 0.055, 0 );
+		m( new THREE.CylinderGeometry( 0.0265, 0.0265, 0.04, 20 ), new THREE.MeshStandardMaterial( { color: 0xd8cfa0, metalness: 0.4, roughness: 0.4 } ), 0, 0.06, 0 );
+		m( new THREE.CylinderGeometry( 0.02, 0.026, 0.01, 20 ), M.metalLight, 0, 0.115, 0 );
+
+	} else if ( k === 'cigarette' ) {
+
+		m( new THREE.BoxGeometry( 0.055, 0.085, 0.022 ), new THREE.MeshStandardMaterial( { color: 0xe9e4d8, roughness: 0.7 } ), 0, 0.0425, 0 );
+		m( new THREE.BoxGeometry( 0.056, 0.03, 0.023 ), new THREE.MeshStandardMaterial( { color: 0x9a1a14, roughness: 0.6 } ), 0, 0.07, 0 );
+		for ( let i = 0; i < 3; i ++ ) m( new THREE.CylinderGeometry( 0.004, 0.004, 0.03, 8 ), new THREE.MeshStandardMaterial( { color: 0xd9a35a } ), - 0.012 + i * 0.012, 0.095, 0 );
+
+	} else if ( k === 'handcuffs' ) {
+
+		for ( const x of [ - 0.03, 0.03 ] ) { const r = m( new THREE.TorusGeometry( 0.026, 0.005, 8, 20 ), M.metalLight, x, 0.006, 0 ); r.rotation.x = Math.PI / 2; }
+		m( new THREE.BoxGeometry( 0.03, 0.006, 0.006 ), M.metalLight, 0, 0.006, 0 );
+
+	} else if ( k === 'saw' ) {
+
+		m( new THREE.BoxGeometry( 0.16, 0.003, 0.035 ), M.metalLight, 0.02, 0.003, 0 );
+		m( new THREE.BoxGeometry( 0.06, 0.02, 0.045 ), new THREE.MeshStandardMaterial( { color: 0x8a2a14, roughness: 0.6 } ), - 0.085, 0.01, 0 );
+
+	} else if ( k === 'inverter' ) {
+
+		m( new THREE.BoxGeometry( 0.06, 0.03, 0.04 ), M.plastic, 0, 0.015, 0 );
+		m( new THREE.BoxGeometry( 0.026, 0.008, 0.02 ), new THREE.MeshStandardMaterial( { color: 0xb3201a, emissive: 0x400000 } ), - 0.013, 0.033, 0 );
+		m( new THREE.BoxGeometry( 0.026, 0.008, 0.02 ), new THREE.MeshStandardMaterial( { color: 0x2d4e9a, emissive: 0x000a30 } ), 0.013, 0.033, 0 );
+
+	} else {
+
+		m( new THREE.CylinderGeometry( 0.02, 0.02, 0.06, 16 ), new THREE.MeshStandardMaterial( { color: 0xc96a1a, roughness: 0.3, transparent: true, opacity: 0.85 } ), 0, 0.03, 0 );
+		m( new THREE.CylinderGeometry( 0.022, 0.022, 0.018, 16 ), new THREE.MeshStandardMaterial( { color: 0xeeeeee } ), 0, 0.068, 0 );
+
+	}
+	g.userData.item = k;
+	scene.add( g ); return g;
+
+}
+const SLOT_X = [ - 0.6, - 0.42, 0.42, 0.6 ];
+const slotPos = ( side, i ) => new THREE.Vector3( SLOT_X[ i % 4 ], TABLE_Y, side === 'player' ? ( i < 4 ? 0.32 : 0.5 ) : ( i < 4 ? - 0.3 : - 0.48 ) );
+
+// ---------- tween engine ----------
+const tweens = [];
+const ease = { lin: t => t, out: t => 1 - Math.pow( 1 - t, 3 ), inOut: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow( - 2 * t + 2, 3 ) / 2 };
+const tween = ( dur, fn, e = ease.lin ) => new Promise( res => tweens.push( { t: 0, dur, fn, e, res } ) );
+const wait = s => tween( s, () => {} );
+
+// ---------- audio (synthesised) ----------
+let actx, bus;
+function audio() {
+
+	if ( ! actx ) {
+
+		try {
+
+			actx = new ( window.AudioContext || window.webkitAudioContext )();
+			const comp = actx.createDynamicsCompressor(); bus = actx.createGain();
+			const conv = actx.createConvolver(), wet = actx.createGain(); wet.gain.value = 0.3;
+			const len = actx.sampleRate * 1.8, ir = actx.createBuffer( 2, len, actx.sampleRate );
+			for ( let c = 0; c < 2; c ++ ) { const d = ir.getChannelData( c ); for ( let i = 0; i < len; i ++ ) d[ i ] = ( Math.random() * 2 - 1 ) * Math.pow( 1 - i / len, 3 ); }
+			conv.buffer = ir; bus.connect( comp ); bus.connect( conv ); conv.connect( wet ); wet.connect( comp ); comp.connect( actx.destination );
+			// room tone: low hum + lamp buzz
+			const hum = actx.createOscillator(); hum.frequency.value = 50; hum.type = 'sawtooth';
+			const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 160;
+			const hg = actx.createGain(); hg.gain.value = 0.035;
+			hum.connect( lp ).connect( hg ).connect( comp ); hum.start();
+			const buzz = actx.createOscillator(); buzz.frequency.value = 120; buzz.type = 'square';
+			const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 4;
+			buzzGain = actx.createGain(); buzzGain.gain.value = 0.006;
+			buzz.connect( bp ).connect( buzzGain ).connect( comp ); buzz.start();
+
+		} catch ( e ) { actx = null; }
+
+	}
+	if ( actx && actx.state === 'suspended' ) actx.resume();
+	return actx;
+
+}
+let buzzGain = null;
+function noise( dur, type, f0, f1, gain, delay = 0 ) {
+
+	const a = audio(); if ( ! a ) return;
+	const buf = a.createBuffer( 1, Math.ceil( a.sampleRate * dur ), a.sampleRate ), d = buf.getChannelData( 0 );
+	for ( let i = 0; i < d.length; i ++ ) d[ i ] = ( Math.random() * 2 - 1 ) * Math.pow( 1 - i / d.length, 2 );
+	const s = a.createBufferSource(); s.buffer = buf;
+	const f = a.createBiquadFilter(); f.type = type; const t0 = a.currentTime + delay;
+	f.frequency.setValueAtTime( f0, t0 ); f.frequency.exponentialRampToValueAtTime( f1, t0 + dur );
+	const g = a.createGain(); g.gain.value = gain;
+	s.connect( f ).connect( g ).connect( bus ); s.start( t0 );
+
+}
+function tone( freq, dur, gain, type = 'sine', fEnd = freq, delay = 0 ) {
+
+	const a = audio(); if ( ! a ) return;
+	const o = a.createOscillator(); o.type = type; const t0 = a.currentTime + delay;
+	o.frequency.setValueAtTime( freq, t0 ); o.frequency.exponentialRampToValueAtTime( fEnd, t0 + dur );
+	const g = a.createGain(); g.gain.setValueAtTime( gain, t0 ); g.gain.exponentialRampToValueAtTime( 0.0001, t0 + dur );
+	o.connect( g ).connect( bus ); o.start( t0 ); o.stop( t0 + dur );
+
+}
+const sfx = {
+	shell: () => { tone( 900 + Math.random() * 200, 0.04, 0.08, 'square', 500 ); noise( 0.05, 'bandpass', 2500, 1500, 0.25 ); },
+	rack: () => { noise( 0.08, 'bandpass', 1600, 2600, 0.5 ); tone( 300, 0.07, 0.15, 'square', 500 ); noise( 0.09, 'bandpass', 2200, 3200, 0.55, 0.16 ); tone( 600, 0.06, 0.15, 'square', 420, 0.16 ); },
+	pick: () => { noise( 0.12, 'lowpass', 900, 300, 0.25 ); },
+	blast: () => { noise( 0.1, 'highpass', 2000, 9000, 1.6 ); noise( 1.2, 'lowpass', 4000, 80, 1.9 ); tone( 90, 0.8, 1.2, 'sine', 25 ); },
+	blank: () => { noise( 0.05, 'highpass', 3000, 7000, 0.7 ); tone( 1200, 0.05, 0.15, 'square', 400 ); },
+	ring: () => { const a = audio(); if ( ! a ) return; const o = a.createOscillator(); o.frequency.value = 4100; const g = a.createGain(); const t = a.currentTime; g.gain.setValueAtTime( 0.0001, t ); g.gain.linearRampToValueAtTime( 0.05, t + 0.1 ); g.gain.exponentialRampToValueAtTime( 0.0001, t + 3.5 ); o.connect( g ).connect( a.destination ); o.start(); o.stop( t + 3.5 ); },
+	heart: v => { tone( 60, 0.15, v, 'sine', 38 ); tone( 56, 0.15, v * 0.7, 'sine', 35, 0.17 ); },
+	item: () => { tone( 500, 0.08, 0.08, 'triangle', 700 ); noise( 0.05, 'bandpass', 1800, 1200, 0.2 ); },
+	saw: () => { for ( let i = 0; i < 6; i ++ ) noise( 0.09, 'bandpass', 3000, 2000, 0.35, i * 0.12 ); },
+	gulp: () => { for ( let i = 0; i < 3; i ++ ) tone( 180, 0.12, 0.2, 'sine', 90, i * 0.22 ); },
+	cuff: () => { noise( 0.06, 'highpass', 3000, 5000, 0.5 ); tone( 2200, 0.08, 0.06, 'triangle', 1800, 0.05 ); },
+	flicker: () => { noise( 0.05, 'bandpass', 3000, 2000, 0.15 ); }
+};
+
+// ---------- game state ----------
+const G = {
+	round: 1, hpMax: 2, hp: { player: 2, dealer: 2 }, items: { player: [], dealer: [] }, itemObjs: { player: [], dealer: [] },
+	queue: [], qi: 0, liveN: 0, blankN: 0, known: { player: false, dealer: false }, cuffed: { player: false, dealer: false },
+	sawed: false, turn: 'player', over: false, phase: 'menu' // menu | busy | choose (player may pick gun/items) | aim (holding gun)
+};
+const other = s => s === 'player' ? 'dealer' : 'player';
+const shuffle = a => { for ( let i = a.length - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ a[ i ], a[ j ] ] = [ a[ j ], a[ i ] ]; } return a; };
+const remaining = () => G.queue.slice( G.qi );
+const pLive = () => { const r = remaining(); return r.length ? r.filter( x => x === 'live' ).length / r.length : 0; };
+const drawHP = () => { dispPlayer.draw( G.hp.player, G.hpMax ); dispDealer.draw( G.hp.dealer, G.hpMax ); };
+
+function setPhase( ph ) {
+
+	G.phase = ph;
+	choiceEl.classList.toggle( 'show', ph === 'aim' );
+	turnEl.textContent = G.over ? '' : G.turn === 'player' ? '▶ 당신의 차례' : '▶ 딜러의 차례';
+	hint( ph === 'choose' ? '총을 클릭해 집으세요 · 아이템을 클릭해 사용' : ph === 'aim' ? '딜러를 클릭하거나 아래에서 선택하세요' : '' );
+
+}
+
+async function lampBlackout( dur ) {
+
+	sfx.flicker(); await tween( 0.08, t => { lampPower = 1 - t; } );
+	await wait( dur );
+	for ( let i = 0; i < 3; i ++ ) { lampPower = 0.6; sfx.flicker(); await wait( 0.05 ); lampPower = 0; await wait( 0.06 ); }
+	lampPower = 1;
+
+}
+
+async function startGame() {
+
+	audio();
+	$( 'start' ).classList.add( 'hide' ); $( 'over' ).classList.add( 'hide' );
+	G.over = false; G.round = 1;
+	blackEl.style.opacity = '0';
+	await startRound();
+
+}
+
+async function startRound() {
+
+	setPhase( 'busy' );
+	roundEl.textContent = G.round;
+	G.hpMax = [ 2, 4, 6 ][ G.round - 1 ];
+	G.hp = { player: G.hpMax, dealer: G.hpMax };
+	for ( const s of [ 'player', 'dealer' ] ) { G.itemObjs[ s ].forEach( o => scene.remove( o ) ); G.itemObjs[ s ] = []; G.items[ s ] = []; }
+	G.cuffed = { player: false, dealer: false }; G.turn = 'player'; setSaw( false );
+	G.queue = []; G.qi = 0;
+	gunHolder = null; dealerGrip = false;
+	await moveGun( POSE.table, 0.4 );
+	if ( ! dealerAlive ) { await lampBlackout( 0.6 ); dealer.visible = true; dealerAlive = true; headPivot.rotation.set( 0, 0, 0 ); dealer.rotation.set( 0, 0, 0 ); }
+	drawHP();
+	say( `라운드 ${G.round}. 체력 ${G.hpMax}.` );
+	await wait( 1.6 );
+	await loadShells();
+	await nextTurn();
+
+}
+
+async function loadShells() {
+
+	setPhase( 'busy' );
+	const n = 2 + Math.floor( Math.random() * 7 ); // 2-8 shells
+	const liveN = Math.max( 1, Math.min( n - 1, Math.round( n * ( 0.3 + Math.random() * 0.4 ) ) ) );
+	G.liveN = liveN; G.blankN = n - liveN;
+	G.queue = shuffle( [ ...Array( liveN ).fill( 'live' ), ...Array( n - liveN ).fill( 'blank' ) ] ); G.qi = 0;
+	G.known = { player: false, dealer: false };
+	// lay the shells out on the table, sorted, so the counts are visible
+	const shells = [ ...Array( liveN ).fill( 'live' ), ...Array( n - liveN ).fill( 'blank' ) ].map( ( k, i ) => {
+
+		const s = makeShell( k ); s.position.set( ( i - ( n - 1 ) / 2 ) * 0.055, TABLE_Y, - 0.14 ); return s;
+
+	} );
+	say( `실탄 ${liveN}발. 공포탄 ${n - liveN}발.` );
+	for ( let i = 0; i < n; i ++ ) { sfx.shell(); await wait( 0.06 ); }
+	await wait( 2.6 );
+	// dealer gathers them up and loads them in an unknown order
+	say( '' );
+	const port = portMark.getWorldPosition( new THREE.Vector3() );
+	for ( const s of shuffle( shells ) ) {
+
+		const from = s.position.clone();
+		await tween( 0.22, t => { s.position.lerpVectors( from, port, t ); s.position.y += Math.sin( t * Math.PI ) * 0.08; s.rotation.z = t * Math.PI / 2; }, ease.inOut );
+		scene.remove( s ); sfx.shell();
+
+	}
+	sfx.rack();
+	await tween( 0.3, t => { pump.position.x = - 0.07 * Math.sin( t * Math.PI ); } );
+	// deal items from round 2 on
+	const per = G.round === 1 ? 0 : G.round === 2 ? 2 : 4;
+	if ( per ) {
+
+		say( '아이템을 받습니다.' );
+		for ( const side of [ 'player', 'dealer' ] ) for ( let i = 0; i < per && G.items[ side ].length < 8; i ++ ) {
+
+			const k = ITEM_KEYS[ Math.floor( Math.random() * ITEM_KEYS.length ) ];
+			const slot = G.items[ side ].length;
+			G.items[ side ].push( k );
+			const o = makeItem( k ); const to = slotPos( side, slot );
+			o.position.set( to.x, to.y + 0.4, to.z ); G.itemObjs[ side ].push( o );
+			if ( side === 'dealer' ) o.rotation.y = Math.PI;
+			sfx.item();
+			await tween( 0.25, t => { o.position.y = to.y + 0.4 * ( 1 - t ); }, ease.out );
+
+		}
+
+	}
+	await wait( 0.5 );
+
+}
+
+function setSaw( on ) { G.sawed = on; front.scale.x = on ? 0.6 : 1; }
+
+async function nextTurn() {
+
+	if ( G.over ) return;
+	if ( G.qi >= G.queue.length ) { say( '총이 비었습니다.' ); await wait( 1.0 ); await loadShells(); }
+	const side = G.turn;
+	if ( G.cuffed[ side ] ) {
+
+		G.cuffed[ side ] = false;
+		say( side === 'player' ? '수갑에 묶여 이번 턴을 건너뜁니다.' : '딜러가 수갑에 묶여 턴을 건너뜁니다.' );
+		await wait( 1.6 ); G.turn = other( side ); return nextTurn();
+
+	}
+	if ( side === 'player' ) { setPhase( 'choose' ); say( '' ); return; }
+	setPhase( 'busy' );
+	await dealerTurn();
+
+}
+
+// ---------- shooting ----------
+async function shoot( shooter, target ) {
+
+	setPhase( 'busy' );
+	const shell = G.queue[ G.qi ], isLive = shell === 'live', dmg = G.sawed && isLive ? 2 : 1;
+	const atPlayer = target === 'player';
+	const odds = G.known[ shooter ] ? ( isLive ? 1 : 0 ) : pLive();
+	if ( shooter === 'player' ) await moveGun( atPlayer ? POSE.playerAimSelf : POSE.playerAimDealer, atPlayer ? 1.0 : 0.5 );
+	else await moveGun( atPlayer ? POSE.dealerAimPlayer : POSE.dealerAimSelf, 1.0 );
+	// the wait before the trigger
+	const hold = 0.8 + odds * 1.4 + Math.random() * 0.8;
+	if ( buzzGain ) buzzGain.gain.setTargetAtTime( 0.0005, actx.currentTime, 0.2 );
+	await tween( hold, t => { trig.rotation.z = 0.3 - 0.35 * t; } );
+	if ( buzzGain ) buzzGain.gain.setTargetAtTime( 0.006, actx.currentTime, 0.05 );
+	trig.rotation.z = 0.3;
+	G.qi ++; G.known = { player: false, dealer: false };
+	const wasSawed = G.sawed;
+
+	if ( isLive ) {
+
+		await muzzleBlast();
+		if ( atPlayer ) {
+
+			G.hp.player -= dmg; drawHP();
+			if ( await playerHit( dmg ) ) return;
+
+		} else {
+
+			G.hp.dealer -= dmg; drawHP();
+			await dealerHit( dmg, shooter === 'dealer' );
+			if ( G.hp.dealer <= 0 ) { if ( wasSawed ) setSaw( false ); await roundWon(); return; }
+
+		}
+
+	} else {
+
+		sfx.blank(); shakeAmt = 0.004;
+		say( target === shooter ? '…찰칵. 공포탄. 한 번 더.' : '…찰칵. 공포탄.' );
+		await wait( 0.9 );
+
+	}
+	if ( wasSawed ) setSaw( false );
+	// rack the next shell, spent hull flies out
+	sfx.rack();
+	ejectShell( shell );
+	await tween( 0.35, t => { pump.position.x = - 0.07 * Math.sin( t * Math.PI ); } );
+	gunHolder = null; dealerGrip = false;
+	await moveGun( POSE.table, 0.7 );
+	G.turn = ( ! isLive && target === shooter ) ? shooter : other( shooter );
+	await nextTurn();
+
+}
+
+function ejectShell( kind ) {
+
+	const s = makeShell( kind );
+	portMark.getWorldPosition( s.position );
+	const v = new THREE.Vector3( ( Math.random() - 0.5 ) * 0.6, 1.0, ( Math.random() - 0.5 ) * 0.4 );
+	let y0 = s.position.y;
+	tween( 0.9, t => {
+
+		s.position.x += v.x * 0.016; s.position.z += v.z * 0.016;
+		s.position.y = Math.max( TABLE_Y, y0 + v.y * t * 0.9 - 4.9 * t * t * 0.9 );
+		s.rotation.x += 0.3; s.rotation.z += 0.2;
+
+	} ).then( () => { s.rotation.set( Math.PI / 2, Math.random() * 6, 0 ); s.position.y = TABLE_Y + 0.017; setTimeout( () => scene.remove( s ), 6000 ); } );
+
+}
+
+let shakeAmt = 0;
+async function muzzleBlast() {
+
+	sfx.blast();
+	const mp = muzzle.getWorldPosition( new THREE.Vector3() );
+	flashSprite.position.copy( mp ); flashLight.position.copy( mp );
+	flashSprite.visible = true; shakeAmt = 0.05;
+	const dir = new THREE.Vector3( 0, 0, 1 ).applyQuaternion( gunRoot.quaternion );
+	for ( let i = 0; i < 18; i ++ ) emit( smokeTex, THREE.NormalBlending, mp.clone(), dir.clone().multiplyScalar( 0.3 + Math.random() * 0.6 ).add( new THREE.Vector3( ( Math.random() - 0.5 ) * 0.3, Math.random() * 0.3, ( Math.random() - 0.5 ) * 0.3 ) ), 0.08 + Math.random() * 0.08, 0.25, 2.2 + Math.random(), 0.35 );
+	await tween( 0.18, t => { flashLight.intensity = 30 * ( 1 - t ); flashSprite.material.opacity = 1 - t; flashSprite.scale.setScalar( 0.35 + 0.4 * t ); bloom.strength = 0.35 + 1.4 * ( 1 - t ); } );
+	flashSprite.visible = false; flashLight.intensity = 0; bloom.strength = 0.35;
+
+}
+
+// returns true if the player died
+async function playerHit( dmg ) {
+
+	flashEl.style.opacity = '1'; blackEl.style.opacity = '1';
+	sfx.ring();
+	await tween( 0.15, t => { flashEl.style.opacity = String( 1 - t ); } );
+	gunHolder = null; dealerGrip = false;
+	gunRoot.position.copy( POSE.table.p ); gunRoot.quaternion.copy( POSE.table.q );
+	if ( G.hp.player <= 0 ) { G.hp.player = 0; drawHP(); await gameOver(); return true; }
+	say( dmg > 1 ? `실탄. 체력 ${dmg} 손실.` : '실탄. 체력 1 손실.' );
+	for ( let i = 0; i < 3; i ++ ) { sfx.heart( 0.6 ); await wait( 0.7 ); }
+	await tween( 1.2, t => { blackEl.style.opacity = String( 1 - t ); } );
+	return false;
+
+}
+
+async function dealerHit( dmg, self ) {
+
+	headKick = 1;
+	say( self ? ( dmg > 1 ? `딜러가 자신을 쐈습니다. 피해 ${dmg}.` : '딜러가 자신을 쐈습니다.' ) : ( dmg > 1 ? `명중. 딜러에게 피해 ${dmg}.` : '명중.' ) );
+	await lampBlackout( 0.25 );
+	await wait( 0.6 );
+
+}
+
+async function roundWon() {
+
+	setPhase( 'busy' );
+	gunHolder = null; dealerGrip = false;
+	await lampBlackout( 0.2 );
+	lampPower = 0; dealer.visible = false; dealerAlive = false;
+	await wait( 1.0 ); lampPower = 1;
+	await moveGun( POSE.table, 0.4 );
+	if ( G.round >= 3 ) {
+
+		G.over = true; setPhase( 'busy' );
+		say( '' );
+		$( 'overTitle' ).textContent = '생존';
+		$( 'overText' ).textContent = '딜러를 세 번 쓰러뜨렸습니다. 당신은 살아서 나갑니다.';
+		ecgOn = false;
+		$( 'over' ).classList.remove( 'hide' );
+		return;
+
+	}
+	say( '딜러가 사라졌습니다.' );
+	await wait( 1.5 );
+	G.round ++;
+	await startRound();
+
+}
+
+let ecgOn = false, ecgT0 = 0;
+async function gameOver() {
+
+	G.over = true; setPhase( 'busy' );
+	say( '' );
+	const beats = [ 0.4, 1.4, 2.8 ];
+	beats.forEach( ( b, i ) => setTimeout( () => sfx.heart( 0.7 - i * 0.2 ), b * 1000 ) );
+	setTimeout( () => { const a = audio(); if ( ! a ) return; const o = a.createOscillator(); o.frequency.value = 1000; const g = a.createGain(); g.gain.value = 0.04; o.connect( g ).connect( a.destination ); o.start(); o.stop( a.currentTime + 4 ); }, 4200 );
+	ecgOn = true; ecgT0 = performance.now();
+	$( 'overTitle' ).textContent = '사망';
+	$( 'overText' ).textContent = `라운드 ${G.round}에서 쓰러졌습니다.`;
+	$( 'over' ).classList.remove( 'hide' );
+
+}
+const ecg = $( 'ecg' ), ecgCtx = ecg.getContext( '2d' );
+function drawEcg() {
+
+	if ( ! ecgOn ) { ecgCtx.clearRect( 0, 0, ecg.width, ecg.height ); return; }
+	const W = ecg.width, H = ecg.height, now = ( performance.now() - ecgT0 ) / 1000, win = 4;
+	ecgCtx.clearRect( 0, 0, W, H ); ecgCtx.strokeStyle = '#5dff8a'; ecgCtx.lineWidth = 2; ecgCtx.shadowColor = '#3f6'; ecgCtx.shadowBlur = 8;
+	ecgCtx.beginPath();
+	for ( let x = 0; x <= W; x ++ ) {
+
+		const t = now - win + x / W * win; let y = 0;
+		for ( const [ b, v ] of [ [ 0.4, 0.9 ], [ 1.4, 0.6 ], [ 2.8, 0.3 ] ] ) { const d = t - b; y += v * ( Math.exp( - Math.pow( d / 0.025, 2 ) ) - 0.25 * Math.exp( - Math.pow( ( d - 0.07 ) / 0.04, 2 ) ) ); }
+		x ? ecgCtx.lineTo( x, H / 2 - y * H * 0.42 ) : ecgCtx.moveTo( x, H / 2 - y * H * 0.42 );
+
+	}
+	ecgCtx.stroke();
+
+}
+
+// ---------- items ----------
+function removeItem( side, idx ) {
+
+	const o = G.itemObjs[ side ][ idx ];
+	G.items[ side ].splice( idx, 1 ); G.itemObjs[ side ].splice( idx, 1 );
+	const p0 = o.position.clone(), to = side === 'player' ? new THREE.Vector3( o.position.x * 0.4, 1.1, 0.95 ) : new THREE.Vector3( o.position.x * 0.4, 1.25, - 0.9 );
+	tween( 0.5, t => { o.position.lerpVectors( p0, to, t ); o.scale.setScalar( 1 - t * 0.9 ); }, ease.inOut ).then( () => scene.remove( o ) );
+	// slide the rest into their slots
+	G.itemObjs[ side ].forEach( ( obj, i ) => { const p = slotPos( side, i ), q = obj.position.clone(); tween( 0.3, t => obj.position.lerpVectors( q, p, t ) ); } );
+
+}
+
+// returns 'ended' when the match flow moved on elsewhere
+async function useItem( side, idx ) {
+
+	const k = G.items[ side ][ idx ];
+	removeItem( side, idx );
+	const who = side === 'player' ? '당신이' : '딜러가';
+	const shell = G.queue[ G.qi ];
+	sfx.item();
+	await wait( 0.4 );
+	switch ( k ) {
+
+		case 'magnifier':
+			G.known[ side ] = true;
+			if ( side === 'player' ) say( `돋보기: 현재 탄은… ${shell === 'live' ? '실탄.' : '공포탄.'}` );
+			else say( '딜러가 돋보기로 약실을 들여다봅니다. …흥미롭군.' );
+			break;
+		case 'beer':
+			sfx.gulp(); await wait( 0.6 );
+			sfx.rack(); ejectShell( shell );
+			await tween( 0.35, t => { pump.position.x = - 0.07 * Math.sin( t * Math.PI ); } );
+			G.qi ++; G.known = { player: false, dealer: false };
+			say( `${who} 탄을 배출했습니다: ${shell === 'live' ? '실탄' : '공포탄'}.` );
+			break;
+		case 'cigarette':
+			G.hp[ side ] = Math.min( G.hpMax, G.hp[ side ] + 1 ); drawHP();
+			say( `${who} 담배를 피웁니다. 체력 +1.` );
+			break;
+		case 'handcuffs':
+			sfx.cuff(); G.cuffed[ other( side ) ] = true;
+			say( side === 'player' ? '딜러에게 수갑을 채웠습니다.' : '딜러가 당신에게 수갑을 채웁니다.' );
+			break;
+		case 'saw':
+			sfx.saw(); setSaw( true );
+			say( `${who} 총신을 잘랐습니다. 다음 실탄은 피해 2배.` );
+			break;
+		case 'inverter':
+			G.queue[ G.qi ] = shell === 'live' ? 'blank' : 'live';
+			G.known[ other( side ) ] = false;
+			say( `${who} 인버터를 썼습니다. 현재 탄의 극성이 뒤집혔습니다.` );
+			break;
+		case 'medicine':
+			sfx.gulp();
+			if ( Math.random() < 0.5 ) { G.hp[ side ] = Math.min( G.hpMax, G.hp[ side ] + 2 ); drawHP(); say( `${who} 만료된 약을 삼켰습니다. 체력 +2.` ); }
+			else {
+
+				G.hp[ side ] -= 1; drawHP(); say( `${who} 만료된 약을 삼켰습니다… 체력 -1.` );
+				if ( G.hp[ side ] <= 0 ) {
+
+					await wait( 1.0 );
+					if ( side === 'player' ) { blackEl.style.opacity = '1'; await gameOver(); } else { headKick = 1; await roundWon(); }
+					return 'ended';
+
+				}
+
+			}
+			break;
+
+	}
+	await wait( 1.0 );
+
+}
+
+// ---------- dealer AI ----------
+async function dealerTurn() {
+
+	say( '' );
+	await wait( 1.0 );
+	const has = k => G.items.dealer.indexOf( k );
+	for ( let guard = 0; guard < 16; guard ++ ) {
+
+		const known = G.known.dealer, shell = G.queue[ G.qi ], rem = remaining();
+		let k = - 1;
+		if ( has( 'cigarette' ) >= 0 && G.hp.dealer < G.hpMax ) k = has( 'cigarette' );
+		else if ( has( 'handcuffs' ) >= 0 && ! G.cuffed.player && rem.length > 1 ) k = has( 'handcuffs' );
+		else if ( has( 'magnifier' ) >= 0 && ! known && rem.length > 1 ) k = has( 'magnifier' );
+		else if ( has( 'beer' ) >= 0 && ! known && rem.length > 1 && pLive() < 0.6 && Math.random() < 0.6 ) k = has( 'beer' );
+		else if ( has( 'inverter' ) >= 0 && known && shell === 'blank' ) k = has( 'inverter' );
+		else if ( has( 'medicine' ) >= 0 && G.hp.dealer <= G.hpMax - 2 && G.hp.dealer > 1 && Math.random() < 0.5 ) k = has( 'medicine' );
+		if ( k < 0 ) break;
+		if ( await useItem( 'dealer', k ) === 'ended' ) return;
+		if ( G.qi >= G.queue.length ) { G.turn = 'dealer'; await nextTurn(); return; }
+		await wait( 0.4 );
+
+	}
+	const known = G.known.dealer, shell = G.queue[ G.qi ];
+	const pl = known ? ( shell === 'live' ? 1 : 0 ) : pLive();
+	const target = pl > 0.5 ? 'player' : pl < 0.5 ? 'dealer' : ( Math.random() < 0.5 ? 'player' : 'dealer' );
+	if ( target === 'player' && has( 'saw' ) >= 0 && ! G.sawed && ( known ? shell === 'live' : pl > 0.6 ) ) await useItem( 'dealer', has( 'saw' ) );
+	// pick up the gun
+	sfx.pick(); gunHolder = 'dealer'; dealerGrip = true;
+	await moveGun( POSE.dealerLift, 0.8 );
+	await wait( 0.5 );
+	say( target === 'player' ? '딜러가 총구를 당신에게 겨눕니다.' : '딜러가 총구를 자기 턱에 댑니다.' );
+	await shoot( 'dealer', target );
+
+}
+
+// ---------- player input ----------
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), mouse = new THREE.Vector2();
+let hovered = null;
+function pickAt( x, y ) {
+
+	ndc.set( x / innerWidth * 2 - 1, - ( y / innerHeight ) * 2 + 1 );
+	ray.setFromCamera( ndc, camera );
+	const targets = [];
+	if ( G.phase === 'choose' ) { targets.push( gunRoot ); G.itemObjs.player.forEach( o => targets.push( o ) ); }
+	if ( G.phase === 'aim' ) targets.push( dealer );
+	const hit = ray.intersectObjects( targets, true )[ 0 ];
+	if ( ! hit ) return null;
+	let o = hit.object;
+	while ( o && ! targets.includes( o ) ) o = o.parent;
+	return o;
+
+}
+addEventListener( 'pointermove', e => {
+
+	mouse.set( e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1 );
+	const o = pickAt( e.clientX, e.clientY );
+	hovered = o;
+	document.body.style.cursor = o ? 'pointer' : '';
+	if ( o && o.userData.item ) { const it = ITEMS[ o.userData.item ]; tipEl.innerHTML = `<b>${it.name}</b><br>${it.desc}`; tipEl.style.display = 'block'; tipEl.style.left = ( e.clientX + 14 ) + 'px'; tipEl.style.top = ( e.clientY + 14 ) + 'px'; }
+	else tipEl.style.display = 'none';
+
+} );
+renderer.domElement.addEventListener( 'click', e => {
+
+	audio();
+	const o = pickAt( e.clientX, e.clientY );
+	if ( ! o ) return;
+	if ( o === gunRoot ) pickUpGun();
+	else if ( o === dealer ) playerShoot( 'dealer' );
+	else if ( o.userData.item ) playerItem( G.itemObjs.player.indexOf( o ) );
+
+} );
+async function pickUpGun() {
+
+	if ( G.phase !== 'choose' ) return;
+	setPhase( 'busy' ); sfx.pick(); gunHolder = 'player';
+	await moveGun( POSE.lift, 0.6 );
+	setPhase( 'aim' );
+
+}
+async function playerItem( idx ) {
+
+	if ( G.phase !== 'choose' || idx < 0 ) return;
+	const k = G.items.player[ idx ];
+	if ( k === 'handcuffs' && G.cuffed.dealer ) { say( '딜러는 이미 수갑을 차고 있습니다.' ); return; }
+	if ( k === 'saw' && G.sawed ) { say( '이미 총신을 잘랐습니다.' ); return; }
+	if ( k === 'cigarette' && G.hp.player >= G.hpMax ) { say( '체력이 가득 찼습니다.' ); return; }
+	setPhase( 'busy' ); tipEl.style.display = 'none';
+	if ( await useItem( 'player', idx ) === 'ended' ) return;
+	if ( G.qi >= G.queue.length ) { G.turn = 'player'; await nextTurn(); return; }
+	setPhase( 'choose' );
+
+}
+function playerShoot( target ) {
+
+	if ( G.phase !== 'aim' ) return;
+	shoot( 'player', target === 'dealer' ? 'dealer' : 'player' );
+
+}
+$( 'cDealer' ).onclick = () => playerShoot( 'dealer' );
+$( 'cSelf' ).onclick = () => playerShoot( 'player' );
+$( 'go' ).onclick = startGame;
+$( 'again' ).onclick = () => { ecgOn = false; startGame(); };
+function toggleFs() { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); } catch ( e ) {} }
+$( 'fs' ).onclick = e => { toggleFs(); e.currentTarget.blur(); };
+addEventListener( 'keydown', e => {
+
+	if ( e.code === 'KeyF' ) toggleFs();
+	if ( G.phase === 'choose' && e.code === 'Space' ) { e.preventDefault(); pickUpGun(); }
+	else if ( G.phase === 'aim' && ( e.code === 'KeyD' || e.code === 'ArrowUp' ) ) playerShoot( 'dealer' );
+	else if ( G.phase === 'aim' && ( e.code === 'KeyS' || e.code === 'ArrowDown' ) ) playerShoot( 'player' );
+
+} );
+
+// ---------- post ----------
+const composer = new EffectComposer( renderer );
+composer.addPass( new RenderPass( scene, camera ) );
+const bloom = new UnrealBloomPass( new THREE.Vector2( innerWidth, innerHeight ), 0.35, 0.5, 0.82 );
+composer.addPass( bloom );
+composer.addPass( new OutputPass() );
+addEventListener( 'resize', () => {
+
+	camera.aspect = innerWidth / innerHeight;
+	camera.fov = camera.aspect < 1 ? 75 : 55; // keep the table in view on portrait screens
+	camera.updateProjectionMatrix();
+	renderer.setSize( innerWidth, innerHeight ); composer.setSize( innerWidth, innerHeight );
+
+} );
+dispatchEvent( new Event( 'resize' ) );
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+const lookTarget = new THREE.Vector3(), headTarget = new THREE.Vector3();
+renderer.setAnimationLoop( () => {
+
+	const dt = Math.min( clock.getDelta(), 0.05 ), time = clock.elapsedTime;
+	for ( let i = tweens.length - 1; i >= 0; i -- ) {
+
+		const tw = tweens[ i ]; tw.t += dt;
+		const p = Math.min( tw.t / tw.dur, 1 ); tw.fn( tw.e( p ) );
+		if ( p >= 1 ) { tweens.splice( i, 1 ); tw.res(); }
+
+	}
+	for ( let i = parts.length - 1; i >= 0; i -- ) {
+
+		const p = parts[ i ]; p.age += dt; const k = p.age / p.life;
+		if ( k >= 1 ) { scene.remove( p.sp ); p.sp.material.dispose(); parts.splice( i, 1 ); continue; }
+		p.sp.position.addScaledVector( p.vel, dt ); p.vel.multiplyScalar( Math.pow( 0.3, dt ) ); p.vel.y += 0.05 * dt;
+		p.sp.scale.addScalar( p.grow * dt ); p.sp.material.opacity = p.op * ( 1 - k );
+
+	}
+
+	// lamp sway + random flicker
+	lamp.rotation.z = Math.sin( time * 0.6 ) * 0.025; lamp.rotation.x = Math.sin( time * 0.45 ) * 0.02;
+	let flick = 1; if ( Math.random() < 0.004 ) flick = 0.3;
+	spot.intensity = 20 * lampPower * flick;
+	bulbMat.color.setScalar( 0.15 + 0.85 * lampPower * flick );
+
+	// dealer idle: breathing, head slowly follows you, kicks back when shot
+	breathe = Math.sin( time * 1.3 ) * 0.006;
+	torso.scale.x = 1 + breathe * 2;
+	headKick *= Math.pow( 0.02, dt );
+	headTarget.copy( camera.position );
+	headPivot.rotation.y = THREE.MathUtils.lerp( headPivot.rotation.y, Math.atan2( headTarget.x - dealer.position.x, headTarget.z - dealer.position.z ) * 0.6 + Math.sin( time * 0.3 ) * 0.05, 0.05 );
+	headPivot.rotation.x = - 0.08 - headKick * 0.7 + Math.sin( time * 0.21 ) * 0.03;
+	headPivot.rotation.z = Math.sin( time * 0.17 ) * 0.06;
+	updateArms( dt );
+
+	// first-person camera: free-ish look with the mouse, shake on shots
+	shakeAmt *= Math.pow( 0.01, dt );
+	camera.position.set( CAM.x + ( Math.random() - 0.5 ) * shakeAmt, CAM.y + Math.sin( time * 0.9 ) * 0.004 + ( Math.random() - 0.5 ) * shakeAmt, CAM.z );
+	lookTarget.set( LOOK.x + mouse.x * 0.55, LOOK.y - mouse.y * 0.35, LOOK.z );
+	camera.lookAt( lookTarget );
+
+	// hover glow on interactive things
+	const glow = hovered ? 0.18 + Math.sin( time * 6 ) * 0.06 : 0;
+	[ gunRoot, ...G.itemObjs.player ].forEach( o => o.traverse( m => { if ( m.isMesh && m.material.emissive ) { if ( ! m.userData.ownMat ) { m.material = m.material.clone(); m.userData.ownMat = true; } m.material.emissive.setScalar( o === hovered ? glow : 0 ); } } ) );
+
+	drawEcg();
+	composer.render();
+
+} );
+drawHP();
+say( '' );
+</script>
+</body>
+</html>
