@@ -470,7 +470,8 @@ function updateRig( rig, dt, lean, leanSign, restFn, poleFn, lookFn ) {
 }
 
 const loader = new GLTFLoader();
-let headModel = null;
+let headModel = null, blinkT = 3;
+const EYE = { x: 0.6, y: 0.74, z: 0.74 }; // eye centres relative to the nose tip, in scan units
 loader.load( 'assets/Xbot.glb', gltf => {
 
 	// dealer: a tall dark figure leaning over the table
@@ -504,6 +505,39 @@ loader.load( 'assets/LeePerrySmith.glb', gltf => {
 	head.position.y = - 0.14; head.position.z = 0.0;
 	head.castShadow = head.receiveShadow = true;
 	headAnchor.add( head ); headModel = head;
+	// the scan was captured with the eyes shut, so give him open eyes: bloodshot sclera, dark iris, wet highlight
+	let nose = 0; const P = geo.attributes.position;
+	for ( let i = 0; i < P.count; i ++ ) if ( P.getZ( i ) > P.getZ( nose ) ) nose = i;
+	const eyeTex = canvasTex( 256, 256, ( g, w, h ) => {
+
+		g.fillStyle = '#b3a993'; g.fillRect( 0, 0, w, h );
+		for ( let i = 0; i < 40; i ++ ) { g.strokeStyle = `rgba(150,20,15,${0.2 + Math.random() * 0.4})`; g.lineWidth = 0.6 + Math.random(); g.beginPath(); let x = Math.random() < 0.5 ? 0 : w, y = Math.random() * h; g.moveTo( x, y ); for ( let k = 0; k < 6; k ++ ) { x += ( w / 2 - x ) * 0.25 + ( Math.random() - 0.5 ) * 20; y += ( h / 2 - y ) * 0.2 + ( Math.random() - 0.5 ) * 20; g.lineTo( x, y ); } g.stroke(); }
+		const ir = g.createRadialGradient( w / 2, h / 2, 0, w / 2, h / 2, 56 );
+		ir.addColorStop( 0, '#000' ); ir.addColorStop( 0.38, '#000' ); ir.addColorStop( 0.42, '#3a2a1c' ); ir.addColorStop( 0.85, '#1c140d' ); ir.addColorStop( 1, '#050403' );
+		g.fillStyle = ir; g.beginPath(); g.arc( w / 2, h / 2, 56, 0, Math.PI * 2 ); g.fill();
+
+	} );
+	eyeTex.wrapS = eyeTex.wrapT = THREE.ClampToEdgeWrapping; eyeTex.repeat.set( 1, 1 );
+	const eyeMat = new THREE.MeshPhysicalMaterial( { map: eyeTex, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05 } );
+	const eyeGeo = new THREE.SphereGeometry( 0.27, 32, 24 );
+	const socketMat = new THREE.MeshBasicMaterial( { map: soft( [ [ 0, 'rgba(0,0,0,.85)' ], [ 0.55, 'rgba(10,4,2,.6)' ], [ 1, 'rgba(0,0,0,0)' ] ] ), transparent: true, depthWrite: false } );
+	{ // spherical UV → put the iris on the front (+z) pole
+		const uv = eyeGeo.attributes.uv, pp = eyeGeo.attributes.position;
+		for ( let i = 0; i < uv.count; i ++ ) { const x = pp.getX( i ) / 0.27, y = pp.getY( i ) / 0.27; uv.setXY( i, 0.5 + x * 0.5, 0.5 + y * 0.5 ); }
+		// back half of the sphere maps to the sclera edge, which is never seen
+	}
+	head.userData.eyes = [ - 1, 1 ].map( sx => {
+
+		const e = new THREE.Mesh( eyeGeo, eyeMat );
+		e.position.set( P.getX( nose ) + sx * EYE.x, P.getY( nose ) + EYE.y, P.getZ( nose ) - EYE.z );
+		e.scale.set( 1, 0.62, 0.7 ); // almond-shaped opening rather than a ball
+		head.add( e );
+		const shade = new THREE.Mesh( new THREE.CircleGeometry( 0.5, 32 ), socketMat ); // sunken, shadowed sockets
+		shade.scale.set( 1.1, 0.8, 1 ); shade.position.copy( e.position ); shade.position.z -= 0.12; shade.position.y += 0.04;
+		head.add( shade );
+		return e;
+
+	} );
 
 } );
 
@@ -1217,6 +1251,19 @@ renderer.setAnimationLoop( () => {
 				rotateBoneWorld( rg.head, new THREE.Vector3( 0, 0, 1 ), Math.sin( time * 0.17 ) * 0.07 );
 
 			} );
+		if ( headModel && headModel.userData.eyes ) {
+
+			blinkT -= dt;
+			if ( blinkT < 0 ) blinkT = 2.5 + Math.random() * 4;
+			const lid = blinkT < 0.14 ? Math.abs( blinkT - 0.07 ) / 0.07 : 1; // quick close-open
+			for ( const e of headModel.userData.eyes ) {
+
+				e.lookAt( camera.position );
+				e.scale.y = 0.62 * Math.max( lid, 0.06 );
+
+			}
+
+		}
 		r.head.getWorldPosition( headAnchor.position );
 		r.head.getWorldQuaternion( headAnchor.quaternion ).multiply( r.headOffset );
 		neckClip.constant = - ( r.neck.getWorldPosition( V() ).y + 0.03 );
@@ -1243,7 +1290,7 @@ renderer.setAnimationLoop( () => {
 } );
 drawHP();
 say( '' );
-window.__dbg = { scene, spot, headAnchor, playerBody, rigs, hold, gripMark, foreMark, barrelMark, portMark, moveGun, POSE, setFinger: v => { FINGER_SIGN = v; }, camera, setLean: v => { dealerLean = v; } };
+window.__dbg = { EYE, get head() { return headModel; }, scene, spot, headAnchor, playerBody, rigs, hold, gripMark, foreMark, barrelMark, portMark, moveGun, POSE, setFinger: v => { FINGER_SIGN = v; }, camera, setLean: v => { dealerLean = v; } };
 </script>
 </body>
 </html>
