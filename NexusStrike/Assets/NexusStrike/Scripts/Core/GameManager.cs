@@ -36,6 +36,7 @@ namespace NexusStrike
         public NavGraph nav;
         public Payload payload;
         public Hud hud;
+        public PortraitStudio portraits;
         public Combatant player;
 
         public const float SetupTime = 15f;
@@ -94,6 +95,7 @@ namespace NexusStrike
             payload.Init(map.path, map.checkpointFractions);
 
             hud = gameObject.AddComponent<Hud>();
+            portraits = PortraitStudio.Create(transform);
             state = MatchState.MainMenu;
         }
 
@@ -111,6 +113,7 @@ namespace NexusStrike
             cam.fieldOfView = PlayerBrain.BaseFov;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.56f, 0.74f, 0.93f);
+            cam.cullingMask &= ~(1 << PortraitStudio.Layer);
             camGo.AddComponent<AudioListener>();
 
             var lightGo = new GameObject("Sun");
@@ -137,6 +140,7 @@ namespace NexusStrike
         void Update()
         {
             UpdateCursor();
+            portraits.SetActive(state == MatchState.HeroSelect || heroPickerOpen);
 
             if (InMatch && GameInput.KeyDown(GKey.Escape))
             {

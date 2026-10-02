@@ -128,7 +128,7 @@ namespace NexusStrike
             maxAmmo = 6;
             reloadDuration = 1.8f;
             ab1 = new Ability("SHIFT", "Jet Boost", 6f);
-            ab2 = new Ability("E", "Concussion Blast", 8f);
+            ab2 = new Ability("E", "Shock Pulse", 8f);
             ultName = "Missile Swarm";
             crosshair = CrosshairStyle.Circle;
         }

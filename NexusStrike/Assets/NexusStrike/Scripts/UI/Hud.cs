@@ -256,7 +256,7 @@ namespace NexusStrike
             int n = heroes.Count;
             float gap = 12f;
             float cw = Mathf.Min(230f, (VW - 80f - gap * (n - 1)) / n);
-            float ch = 300f;
+            float ch = 340f;
             float x0 = (VW - (cw * n + gap * (n - 1))) / 2f;
             float y0 = 170f;
             for (int i = 0; i < n; i++)
@@ -268,14 +268,14 @@ namespace NexusStrike
                 bool hover = r.Contains(Event.current.mousePosition);
                 Fill(r, new Color(0.07f, 0.09f, 0.13f, 0.92f));
                 Fill(new Rect(r.x, r.y, r.width, 6), HeroRoster.RoleColor(h.role));
-                var portrait = new Rect(r.x + 10, r.y + 16, r.width - 20, 130);
+                var portrait = new Rect(r.x + 8, r.y + 12, r.width - 16, 176);
                 Fill(portrait, Color.Lerp(h.color, Color.black, 0.35f));
                 DrawPortrait(portrait, h);
-                Text(new Rect(r.x, r.y + 152, r.width, 36), h.name, 28, Color.white);
-                Text(new Rect(r.x, r.y + 186, r.width, 24), h.title, 16, new Color(1, 1, 1, 0.65f), TextAnchor.MiddleCenter, false);
-                Text(new Rect(r.x, r.y + 214, r.width, 24), HeroRoster.RoleName(h.role), 18, HeroRoster.RoleColor(h.role));
-                Text(new Rect(r.x, r.y + 244, r.width, 22), HpLine(h), 15, new Color(1, 1, 1, 0.8f), TextAnchor.MiddleCenter, false);
-                Text(new Rect(r.x, r.y + 270, r.width, 22), "[" + (i + 1) + "]", 15, new Color(1, 1, 1, 0.4f), TextAnchor.MiddleCenter, false);
+                Text(new Rect(r.x, r.y + 192, r.width, 36), h.name, 28, Color.white);
+                Text(new Rect(r.x, r.y + 226, r.width, 24), h.title, 16, new Color(1, 1, 1, 0.65f), TextAnchor.MiddleCenter, false);
+                Text(new Rect(r.x, r.y + 254, r.width, 24), HeroRoster.RoleName(h.role), 18, HeroRoster.RoleColor(h.role));
+                Text(new Rect(r.x, r.y + 284, r.width, 22), HpLine(h), 15, new Color(1, 1, 1, 0.8f), TextAnchor.MiddleCenter, false);
+                Text(new Rect(r.x, r.y + 310, r.width, 22), "[" + (i + 1) + "]", 15, new Color(1, 1, 1, 0.4f), TextAnchor.MiddleCenter, false);
                 Frame(r, sel ? new Color(1f, 0.8f, 0.3f) : current ? TeamColors.Ally : new Color(1, 1, 1, hover ? 0.6f : 0.15f), sel ? 4f : 2f);
                 if (GUI.Button(r, GUIContent.none, GUIStyle.none)) { selectedHero = h.id; Sfx.Play2D("hit", 0.4f, 0.8f); }
                 if (KeyEvent(KeyCode.Alpha1 + i)) selectedHero = h.id;
@@ -283,16 +283,22 @@ namespace NexusStrike
 
             // details
             var sh = HeroRoster.Get(selectedHero);
-            var dr = new Rect(x0, y0 + ch + 20, cw * n + gap * (n - 1), 360);
+            var dr = new Rect(x0, y0 + ch + 20, cw * n + gap * (n - 1), 340);
             Fill(dr, new Color(0.05f, 0.07f, 0.1f, 0.88f));
-            Text(new Rect(dr.x + 24, dr.y + 14, 600, 44), sh.name + "  —  " + sh.title, 32, Color.white, TextAnchor.MiddleLeft);
-            WrapText(new Rect(dr.x + 24, dr.y + 60, dr.width * 0.42f, 120), sh.description, 20, new Color(1, 1, 1, 0.85f));
-            Text(new Rect(dr.x + 24, dr.y + 170, 600, 30), "HP " + HpLine(sh) + "   ·   SPEED " + sh.speed.ToString("0.0"), 18, new Color(1, 1, 1, 0.7f), TextAnchor.MiddleLeft, false);
-            float ax = dr.x + dr.width * 0.46f;
+            var big = new Rect(dr.x + 14, dr.y + 14, 234, 312);
+            Fill(big, Color.Lerp(sh.color, Color.black, 0.35f));
+            DrawPortrait(big, sh);
+            Frame(big, new Color(1f, 0.8f, 0.3f, 0.6f), 2f);
+            float tx = big.xMax + 22;
+            Text(new Rect(tx, dr.y + 14, 600, 44), sh.name + "  —  " + sh.title, 32, Color.white, TextAnchor.MiddleLeft);
+            Text(new Rect(tx, dr.y + 54, 400, 26), HeroRoster.RoleName(sh.role), 20, HeroRoster.RoleColor(sh.role), TextAnchor.MiddleLeft);
+            WrapText(new Rect(tx, dr.y + 88, dr.width * 0.5f - tx + dr.x, 130), sh.description, 20, new Color(1, 1, 1, 0.85f));
+            Text(new Rect(tx, dr.y + 230, 600, 30), "HP " + HpLine(sh) + "   ·   SPEED " + sh.speed.ToString("0.0"), 18, new Color(1, 1, 1, 0.7f), TextAnchor.MiddleLeft, false);
+            float ax = dr.x + dr.width * 0.5f;
             for (int i = 0; i < sh.abilities.Length; i++)
             {
                 var a = sh.abilities[i];
-                float ay = dr.y + 18 + i * 64;
+                float ay = dr.y + 14 + i * 64;
                 Fill(new Rect(ax, ay, 80, 50), new Color(1, 1, 1, 0.1f));
                 Text(new Rect(ax, ay, 80, 50), a.key, 18, new Color(1f, 0.8f, 0.35f));
                 Text(new Rect(ax + 92, ay - 2, 500, 28), a.name, 21, Color.white, TextAnchor.MiddleLeft);
@@ -324,6 +330,12 @@ namespace NexusStrike
 
         void DrawPortrait(Rect r, HeroDefinition h)
         {
+            var live = GM.portraits != null ? GM.portraits.Get(h.id) : null;
+            if (live != null)
+            {
+                GUI.DrawTexture(r, live, ScaleMode.ScaleAndCrop);
+                return;
+            }
             // stylised bust built from rectangles in the hero's palette
             float cx = r.center.x;
             Color main = h.color, dark = Color.Lerp(h.color, Color.black, 0.5f);

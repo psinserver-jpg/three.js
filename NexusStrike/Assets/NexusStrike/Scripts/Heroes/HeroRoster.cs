@@ -88,7 +88,7 @@ namespace NexusStrike
                     new AbilityText("LMB", "Rocket Launcher", "Explosive rockets with splash damage."),
                     new AbilityText("RMB", "Hover Jets", "Hold in the air to glide and hover."),
                     new AbilityText("SHIFT", "Jet Boost", "Rocket straight up into the air."),
-                    new AbilityText("E", "Concussion Blast", "Knock enemies away with an explosive pulse."),
+                    new AbilityText("E", "Shock Pulse", "Knock enemies away with an explosive pulse."),
                     new AbilityText("Q", "Missile Swarm", "Hover and unleash a barrage of mini-rockets."),
                 }
             });
@@ -109,10 +109,10 @@ namespace NexusStrike
             });
             All.Add(new HeroDefinition
             {
-                id = "lumen", name = "LUMEN", title = "Radiant Medic", role = HeroRole.Support,
-                description = "Beam healer who keeps a single ally alive and protects the whole team with Sanctuary.",
+                id = "lumen", name = "LUMEN", title = "Lantern Medic", role = HeroRole.Support,
+                description = "Cloaked field medic who carries lantern cells and a light drone, tethering allies with a mending beam.",
                 health = 150, armor = 0, shield = 75, speed = 5.6f, ultCost = 2000f,
-                color = new Color(0.95f, 0.92f, 0.75f), kitType = typeof(LumenKit),
+                color = new Color(0.15f, 0.2f, 0.37f), kitType = typeof(LumenKit),
                 abilities = new[]
                 {
                     new AbilityText("LMB", "Mend Beam", "Hold on an ally to tether and heal them continuously."),
