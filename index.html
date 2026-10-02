@@ -270,8 +270,9 @@ table.receiveShadow = true;
 scene.add( table );
 
 // ---------- revolver ----------
-const steel = new THREE.MeshPhysicalMaterial( { color: 0x9aa0a8, metalness: 1, roughness: 0.22, roughnessMap: brushTex, envMapIntensity: 1.8, clearcoat: 0.6, clearcoatRoughness: 0.15 } );
-const darkSteel = new THREE.MeshPhysicalMaterial( { color: 0x1a1d24, metalness: 1, roughness: 0.3, roughnessMap: brushTex, envMapIntensity: 1.8, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.3, sheenColor: 0x2a3a6a } ); // deep blued finish
+const steel = new THREE.MeshPhysicalMaterial( { color: 0xbcc0c6, metalness: 1, roughness: 0.26, roughnessMap: brushTex, envMapIntensity: 1.8, clearcoat: 0.35, clearcoatRoughness: 0.12 } ); // polished stainless
+const darkSteel = new THREE.MeshPhysicalMaterial( { color: 0x55595f, metalness: 1, roughness: 0.38, roughnessMap: brushTex, envMapIntensity: 1.6 } ); // satin accents
+const blackOxide = new THREE.MeshStandardMaterial( { color: 0x151619, metalness: 0.6, roughness: 0.45 } );
 const wood = new THREE.MeshStandardMaterial( { color: 0xffffff, map: gripTex, bumpMap: gripTex, bumpScale: 1.2, roughness: 0.5, metalness: 0.05 } );
 const hole = new THREE.MeshBasicMaterial( { color: 0x000000 } );
 const brass = new THREE.MeshStandardMaterial( { color: 0xe0b050, metalness: 1, roughness: 0.2, envMapIntensity: 1.8 } );
@@ -300,8 +301,9 @@ scene.add( gun );
 const cyl = new THREE.Group();
 gun.add( cyl );
 const R_RING = 0.46;
-mesh( new THREE.CylinderGeometry( 0.78, 0.78, 1.2, 64 ).rotateZ( Math.PI / 2 ), steel, 0, 0, 0, cyl );
-for ( const sx of [ - 0.6, 0.6 ] ) mesh( new THREE.TorusGeometry( 0.77, 0.025, 8, 64 ).rotateY( Math.PI / 2 ), darkSteel, sx, 0, 0, cyl );
+// lathed cylinder with chamfered faces
+const cylProfile = [ [ 0, - 0.6 ], [ 0.68, - 0.6 ], [ 0.765, - 0.53 ], [ 0.78, - 0.46 ], [ 0.78, 0.48 ], [ 0.75, 0.56 ], [ 0.66, 0.6 ], [ 0, 0.6 ] ].map( ( [ r, y ] ) => new THREE.Vector2( r, y ) );
+mesh( new THREE.LatheGeometry( cylProfile, 96 ).rotateZ( Math.PI / 2 ), steel, 0, 0, 0, cyl );
 const liveMat = new THREE.MeshStandardMaterial( { color: 0xd01818, metalness: 0.2, roughness: 0.4, emissive: 0x300000 } );
 const blankMat = new THREE.MeshStandardMaterial( { color: 0x3b6fd8, metalness: 0.2, roughness: 0.4, emissive: 0x0a1230 } );
 const rounds = [];
@@ -322,70 +324,112 @@ for ( let i = 0; i < CHAMBERS; i ++ ) {
 	cyl.add( r );
 	rounds.push( r );
 	// flutes
-	mesh( new THREE.CylinderGeometry( 0.09, 0.09, 1.0, 12 ).rotateZ( Math.PI / 2 ), darkSteel, 0, 0.78 * Math.cos( a + STEP / 2 ), 0.78 * Math.sin( a + STEP / 2 ), cyl );
+	const fl = mesh( new THREE.CapsuleGeometry( 0.085, 0.62, 6, 16 ).rotateZ( Math.PI / 2 ), darkSteel, 0.06, 0.74 * Math.cos( a + STEP / 2 ), 0.74 * Math.sin( a + STEP / 2 ), cyl ); // flute
+	fl.scale.set( 1, 1, 0.75 );
+	const stop = mesh( new THREE.BoxGeometry( 0.12, 0.05, 0.06 ), blackOxide, - 0.2, 0.775 * Math.cos( a ), 0.775 * Math.sin( a ), cyl ); stop.rotation.x = - a; // cylinder stop notch
 
 }
 mesh( new THREE.CylinderGeometry( 0.12, 0.12, 1.5, 16 ).rotateZ( Math.PI / 2 ), darkSteel, 0, 0, 0, cyl ); // center pin
 
-// frame (side profile, extruded) + top strap
+// ---- frame: one solid side profile with the cylinder window and trigger guard cut out ----
 const fs = new THREE.Shape();
-fs.moveTo( - 0.6, 0.95 );
-fs.lineTo( - 1.9, 0.95 );
-fs.quadraticCurveTo( - 2.4, 0.95, - 2.45, 0.55 );
-fs.lineTo( - 2.55, 0.2 );
-fs.lineTo( - 3.0, - 0.7 );
-fs.lineTo( - 3.05, - 1.9 );
-fs.lineTo( - 2.25, - 1.95 );
-fs.lineTo( - 1.95, - 0.6 );
-fs.quadraticCurveTo( - 1.9, - 0.45, - 1.7, - 0.45 );
-fs.lineTo( - 0.6, - 0.45 );
+fs.moveTo( 0.76, 0.98 );
+fs.lineTo( - 1.75, 0.98 );
+fs.quadraticCurveTo( - 2.08, 0.98, - 2.16, 0.78 );
+fs.lineTo( - 2.24, 0.36 );
+fs.quadraticCurveTo( - 2.3, 0.08, - 2.45, - 0.1 );
+fs.bezierCurveTo( - 2.78, - 0.5, - 2.88, - 1.25, - 2.82, - 2.05 ); // back strap
+fs.quadraticCurveTo( - 2.78, - 2.26, - 2.52, - 2.26 );
+fs.lineTo( - 2.06, - 2.26 );
+fs.quadraticCurveTo( - 1.86, - 2.22, - 1.89, - 2.0 );
+fs.bezierCurveTo( - 1.92, - 1.45, - 1.78, - 1.08, - 1.72, - 0.98 ); // front strap
+fs.bezierCurveTo( - 1.74, - 1.58, - 0.92, - 1.66, - 0.78, - 1.12 ); // trigger guard
+fs.lineTo( - 0.7, - 0.98 );
+fs.lineTo( 0.56, - 0.98 );
+fs.quadraticCurveTo( 0.76, - 0.98, 0.76, - 0.76 );
 fs.closePath();
-mesh( extrude( fs, 0.42, 0.04 ), darkSteel );
-mesh( new THREE.BoxGeometry( 1.5, 0.16, 0.38 ), darkSteel, 0.1, 0.9, 0 ); // top strap
-mesh( new THREE.BoxGeometry( 0.1, 0.12, 0.08 ), steel, - 0.55, 0.78, 0 ); // rear sight notch block
+const win = new THREE.Path();
+win.moveTo( - 0.63, - 0.8 ); win.lineTo( 0.63, - 0.8 ); win.lineTo( 0.63, 0.86 ); win.lineTo( - 0.63, 0.86 ); win.closePath();
+const guardHole = new THREE.Path();
+guardHole.absellipse( - 1.23, - 1.16, 0.3, 0.2, 0, Math.PI * 2, true );
+fs.holes.push( win, guardHole );
+function extrudeR( shape, depth, bevel, segs = 5 ) {
 
-// wood grip panels
+	const g = new THREE.ExtrudeGeometry( shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: segs, curveSegments: 32 } );
+	g.translate( 0, 0, - depth / 2 );
+	return g;
+
+}
+mesh( extrudeR( fs, 0.36, 0.06 ), steel );
+// rear sight on the top strap
+mesh( new THREE.BoxGeometry( 0.34, 0.1, 0.24 ), blackOxide, - 1.45, 1.06, 0 );
+mesh( new THREE.BoxGeometry( 0.06, 0.05, 0.26 ), steel, - 1.32, 1.12, 0 );
+// side plate screws
+for ( const [ x, y ] of [ [ - 1.85, 0.4 ], [ - 1.35, - 0.55 ], [ - 2.0, - 0.45 ] ] ) for ( const z of [ - 0.24, 0.24 ] ) {
+
+	const sc = mesh( new THREE.CylinderGeometry( 0.05, 0.05, 0.02, 20 ).rotateX( Math.PI / 2 ), darkSteel, x, y, z );
+	mesh( new THREE.BoxGeometry( 0.08, 0.012, 0.012 ), blackOxide, x, y, z + Math.sign( z ) * 0.012 ).rotation.z = 0.6;
+
+}
+
+// ---- walnut grip with checkering, rounded panels ----
 const gs = new THREE.Shape();
-gs.moveTo( - 2.2, 0.0 );
-gs.lineTo( - 2.88, - 0.75 );
-gs.lineTo( - 2.95, - 1.82 );
-gs.lineTo( - 2.3, - 1.87 );
-gs.lineTo( - 2.02, - 0.7 );
-gs.closePath();
-for ( const sz of [ - 0.27, 0.27 ] ) mesh( extrude( gs, 0.08, 0.03 ), wood, 0, 0, sz );
-mesh( new THREE.CylinderGeometry( 0.05, 0.05, 0.7, 12 ).rotateX( Math.PI / 2 ), steel, - 2.5, - 0.3, 0 ); // grip screw
+gs.moveTo( - 2.36, - 0.22 );
+gs.bezierCurveTo( - 2.66, - 0.6, - 2.76, - 1.25, - 2.71, - 2.02 );
+gs.quadraticCurveTo( - 2.68, - 2.14, - 2.5, - 2.14 );
+gs.lineTo( - 2.12, - 2.14 );
+gs.quadraticCurveTo( - 1.99, - 2.1, - 2.0, - 1.96 );
+gs.bezierCurveTo( - 2.02, - 1.45, - 1.92, - 1.12, - 1.94, - 0.8 );
+gs.quadraticCurveTo( - 2.0, - 0.45, - 2.36, - 0.22 );
+for ( const sz of [ - 0.25, 0.25 ] ) {
 
-// barrel (thicker at the breech), muzzle ring, bore, ejector rod, lug, sight
-mesh( new THREE.CylinderGeometry( 0.23, 0.19, 2.9, 32 ).rotateZ( Math.PI / 2 ), steel, 2.0, R_RING, 0 );
-mesh( new THREE.TorusGeometry( 0.2, 0.03, 8, 32 ).rotateY( Math.PI / 2 ), darkSteel, 3.43, R_RING, 0 );
-const bore = new THREE.Mesh( new THREE.CircleGeometry( 0.115, 24 ).rotateY( Math.PI / 2 ), hole );
-bore.position.set( 3.455, R_RING, 0 );
+	mesh( extrudeR( gs, 0.06, 0.07, 6 ), wood, 0, 0, sz );
+	mesh( new THREE.CylinderGeometry( 0.07, 0.07, 0.02, 24 ).rotateX( Math.PI / 2 ), new THREE.MeshStandardMaterial( { color: 0xc9a24a, metalness: 1, roughness: 0.3 } ), - 2.33, - 0.75, sz + Math.sign( sz ) * 0.12 ); // medallion
+
+}
+
+// ---- barrel: round tube, full-length underlug, ventilated rib, crowned muzzle ----
+mesh( new THREE.CylinderGeometry( 0.2, 0.2, 2.72, 48 ).rotateZ( Math.PI / 2 ), steel, 2.09, R_RING, 0 );
+mesh( new THREE.CylinderGeometry( 0.22, 0.22, 0.14, 48 ).rotateZ( Math.PI / 2 ), steel, 0.8, R_RING, 0 ); // barrel shoulder
+const lugS = new THREE.Shape();
+lugS.moveTo( 0.72, R_RING ); lugS.lineTo( 3.42, R_RING ); lugS.lineTo( 3.42, - 0.14 ); lugS.quadraticCurveTo( 3.42, - 0.3, 3.24, - 0.3 );
+lugS.lineTo( 1.0, - 0.3 ); lugS.quadraticCurveTo( 0.74, - 0.28, 0.72, - 0.02 ); lugS.closePath();
+mesh( extrudeR( lugS, 0.2, 0.05 ), steel );
+const ribS = new THREE.Shape(); // rib with vent windows
+ribS.moveTo( 0.76, R_RING + 0.14 ); ribS.lineTo( 3.42, R_RING + 0.14 ); ribS.lineTo( 3.42, R_RING + 0.34 ); ribS.lineTo( 0.76, R_RING + 0.34 ); ribS.closePath();
+for ( let i = 0; i < 6; i ++ ) { const v = new THREE.Path(); const x0 = 1.0 + i * 0.4; v.moveTo( x0, R_RING + 0.2 ); v.lineTo( x0 + 0.26, R_RING + 0.2 ); v.lineTo( x0 + 0.26, R_RING + 0.28 ); v.lineTo( x0, R_RING + 0.28 ); v.closePath(); ribS.holes.push( v ); }
+mesh( extrudeR( ribS, 0.1, 0.025, 3 ), steel );
+const sightS = new THREE.Shape(); // ramp front sight with red insert
+sightS.moveTo( 3.0, R_RING + 0.34 ); sightS.lineTo( 3.36, R_RING + 0.34 ); sightS.lineTo( 3.36, R_RING + 0.5 ); sightS.quadraticCurveTo( 3.2, R_RING + 0.48, 3.0, R_RING + 0.34 );
+mesh( extrudeR( sightS, 0.05, 0.01, 2 ), steel );
+mesh( new THREE.BoxGeometry( 0.12, 0.04, 0.072 ), new THREE.MeshStandardMaterial( { color: 0xff3a1a, emissive: 0x401000, roughness: 0.4 } ), 3.28, R_RING + 0.44, 0 );
+mesh( new THREE.TorusGeometry( 0.15, 0.05, 12, 40 ).rotateY( Math.PI / 2 ), steel, 3.44, R_RING, 0 ); // crown
+const bore = new THREE.Mesh( new THREE.CircleGeometry( 0.115, 32 ).rotateY( Math.PI / 2 ), hole );
+bore.position.set( 3.47, R_RING, 0 );
 gun.add( bore );
-mesh( new THREE.CylinderGeometry( 0.055, 0.055, 2.3, 12 ).rotateZ( Math.PI / 2 ), steel, 1.85, - 0.12, 0 ); // ejector rod
-mesh( new THREE.SphereGeometry( 0.08, 12, 8 ), steel, 3.0, - 0.12, 0 );
-const lugS = new THREE.Shape(); // full-length underlug enclosing the ejector rod
-lugS.moveTo( 0.6, R_RING ); lugS.lineTo( 3.42, R_RING ); lugS.lineTo( 3.42, - 0.12 ); lugS.quadraticCurveTo( 3.42, - 0.26, 3.25, - 0.26 ); lugS.lineTo( 0.85, - 0.26 ); lugS.quadraticCurveTo( 0.6, - 0.2, 0.6, 0.05 ); lugS.closePath();
-mesh( extrude( lugS, 0.24, 0.04 ), darkSteel );
-for ( let i = 0; i < 6; i ++ ) mesh( new THREE.BoxGeometry( 0.16, 0.1, 0.13 ), darkSteel, 1.0 + i * 0.42, R_RING + 0.25, 0 ); // vent rib posts
-mesh( new THREE.BoxGeometry( 0.14, 0.14, 0.06 ), darkSteel, 3.3, R_RING + 0.3, 0 ); // front sight
-mesh( new THREE.BoxGeometry( 2.8, 0.05, 0.15 ), darkSteel, 2.02, R_RING + 0.32, 0 ); // rib top
-mesh( new THREE.CylinderGeometry( 0.235, 0.235, 2.9, 32 ).rotateZ( Math.PI / 2 ), darkSteel, 2.0, R_RING, 0 ); // blued barrel sleeve
+mesh( new THREE.CylinderGeometry( 0.06, 0.06, 0.04, 20 ).rotateZ( Math.PI / 2 ), darkSteel, 3.45, - 0.08, 0 ); // ejector rod tip
+mesh( new THREE.CylinderGeometry( 0.035, 0.035, 0.12, 12 ).rotateZ( Math.PI / 2 ), blackOxide, 0.6, 0.0, 0.0 ); // cylinder latch pin
 
-const guard = mesh( new THREE.TorusGeometry( 0.45, 0.05, 10, 32, Math.PI ), darkSteel, - 1.15, - 0.45, 0 );
-guard.rotation.z = Math.PI;
+// cylinder release latch on the left side plate
+mesh( extrudeR( ( () => { const l = new THREE.Shape(); l.moveTo( - 0.95, 0.42 ); l.lineTo( - 0.7, 0.42 ); l.lineTo( - 0.72, 0.58 ); l.lineTo( - 0.95, 0.58 ); l.closePath(); return l; } )(), 0.05, 0.02, 2 ), darkSteel, 0, 0, 0.25 );
 
+// ---- trigger (smooth crescent) ----
 const trigger = new THREE.Group();
-trigger.position.set( - 1.2, - 0.15, 0 );
+trigger.position.set( - 1.18, - 0.95, 0 );
 gun.add( trigger );
-mesh( new THREE.BoxGeometry( 0.09, 0.45, 0.09 ), steel, 0, - 0.2, 0, trigger ).rotation.z = 0.25;
+const ts = new THREE.Shape();
+ts.moveTo( - 0.05, 0 ); ts.quadraticCurveTo( 0.12, - 0.15, 0.04, - 0.38 ); ts.lineTo( - 0.03, - 0.36 ); ts.quadraticCurveTo( 0.03, - 0.16, - 0.12, 0 ); ts.closePath();
+mesh( extrudeR( ts, 0.08, 0.015, 2 ), steel, 0, 0, 0, trigger );
 
+// ---- hammer with checkered spur ----
 const hammer = new THREE.Group();
-hammer.position.set( - 2.3, 0.62, 0 );
+hammer.position.set( - 2.0, 0.72, 0 );
 gun.add( hammer );
 const hs = new THREE.Shape();
-hs.moveTo( 0.05, 0 ); hs.lineTo( 0.12, 0.35 ); hs.quadraticCurveTo( 0.05, 0.58, - 0.3, 0.68 );
-hs.lineTo( - 0.33, 0.55 ); hs.lineTo( - 0.14, 0.42 ); hs.lineTo( - 0.12, 0.05 ); hs.closePath();
-mesh( extrude( hs, 0.1, 0.02 ), steel, 0, 0, 0, hammer );
+hs.moveTo( 0.08, - 0.1 ); hs.lineTo( 0.12, 0.3 ); hs.quadraticCurveTo( 0.06, 0.52, - 0.22, 0.62 ); hs.quadraticCurveTo( - 0.42, 0.66, - 0.44, 0.56 );
+hs.quadraticCurveTo( - 0.3, 0.48, - 0.18, 0.36 ); hs.lineTo( - 0.12, - 0.1 ); hs.closePath();
+mesh( extrudeR( hs, 0.1, 0.025, 3 ), steel, 0, 0, 0, hammer );
+for ( let i = 0; i < 5; i ++ ) mesh( new THREE.BoxGeometry( 0.02, 0.012, 0.15 ), blackOxide, - 0.36 + i * 0.05, 0.6 + Math.sin( i * 0.5 ) * 0.03, 0, hammer ).rotation.z = 0.35;
 
 gun.position.set( - 0.4, 0, 0 );
 
