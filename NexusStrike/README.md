@@ -76,6 +76,17 @@ Unity로 만든 **5v5 하이퍼 히어로 슈터**입니다. 역할 고정(탱�
 - **단축키**: `H` 어디서나 영웅 변경 · `F2` 궁극기 무한 · `F3` 쿨다운 없음 · `F4` 표적 초기화
 - 로봇은 쓰러져도 2.5초 뒤 제자리에서 다시 나타나고, 플레이어는 3초 뒤 스폰 지점에서 부활합니다.
 
+## 무료 에셋 적용하기
+
+기본 상태에서는 모든 소리와 모델을 코드로 만들어 쓰지만, 무료(CC0) 에셋을 폴더에 넣으면 자동으로 교체됩니다. 없는 파일은 기본 버전으로 대체돼요. 이 개발 환경은 에셋 사이트가 차단돼 있어 에셋은 포함하지 못했고, 직접 내려받아 넣으시면 됩니다.
+
+- **효과음**: `Assets/NexusStrike/Resources/NexusStrike/Sfx/<id>.wav|ogg`
+  - id: `rifle cannon dart bolt rocket explosion heal hit headshot kill ability ult reload barrier stun announce pickup death whoosh slam`
+- **무기 모델**: `Assets/NexusStrike/Resources/NexusStrike/Weapons/<영웅id>.prefab` (영웅id: `ironclad titan vex kestrel rook lumen cypress`)
+  - 모델은 +Z 방향을 향해야 하며, 자식 오브젝트 `Muzzle`를 두면 총구 위치로 쓰입니다.
+- **추천 CC0 팩** (받기 전에 각 사이트에서 라이선스를 확인하세요): Kenney의 Blaster Kit(무기 모델), Sci-fi Sounds·Impact Sounds(효과음), Quaternius의 3D 모델 팩.
+- 팩에 들어 있는 라이선스 파일은 함께 보관하세요.
+
 ## 캐릭터 모델
 
 캐릭터는 공통 뼈대(골반, 허리, 가슴, 목, 머리, 3마디 팔·다리)에 영웅별 장비 파츠를 붙여 만듭니다.

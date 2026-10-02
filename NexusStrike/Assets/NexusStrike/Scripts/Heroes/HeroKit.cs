@@ -69,6 +69,25 @@ namespace NexusStrike
                 muzzle.SetParent(weapon, false);
                 muzzle.localPosition = new Vector3(0f, 0f, 0.7f);
             }
+            TryUseImportedWeapon(c);
+        }
+
+        /// <summary>
+        /// If a prefab exists at Resources/NexusStrike/Weapons/&lt;heroId&gt; it replaces the procedural weapon art.
+        /// The prefab should face +Z; an optional child named "Muzzle" marks the barrel tip.
+        /// </summary>
+        void TryUseImportedWeapon(Combatant c)
+        {
+            var prefab = Resources.Load<GameObject>("NexusStrike/Weapons/" + c.def.id);
+            if (prefab == null) return;
+            foreach (Transform child in weapon)
+                if (child != muzzle) Destroy(child.gameObject);
+            var inst = Instantiate(prefab, weapon, false);
+            inst.name = "ImportedWeapon";
+            foreach (var col in inst.GetComponentsInChildren<Collider>()) Destroy(col);
+            ModelUtil.SetLayerRecursive(inst, weapon.gameObject.layer);
+            var m = inst.transform.Find("Muzzle");
+            if (m != null) muzzle = m;
         }
 
         protected abstract void Setup();

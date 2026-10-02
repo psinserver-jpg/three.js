@@ -44,6 +44,21 @@ namespace NexusStrike
                 ui[i].spatialBlend = 0f;
             }
             Build();
+            ApplyOverrides();
+        }
+
+        /// <summary>
+        /// Any AudioClip placed at Resources/NexusStrike/Sfx/&lt;id&gt; (e.g. rifle.wav, explosion.ogg) replaces the
+        /// synthesized sound with that id. Ids: see Build().
+        /// </summary>
+        static void ApplyOverrides()
+        {
+            var ids = new List<string>(clips.Keys);
+            foreach (var id in ids)
+            {
+                var clip = Resources.Load<AudioClip>("NexusStrike/Sfx/" + id);
+                if (clip != null) clips[id] = clip;
+            }
         }
 
         public static void Play(string id, Vector3 pos, float volume = 1f, float pitch = 1f)
