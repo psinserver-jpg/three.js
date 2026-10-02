@@ -31,6 +31,7 @@
 	#dying { z-index: 3; position: fixed; inset: 0; pointer-events: none; opacity: 0; --close: 120%; transition: opacity 1s;
 		background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) var(--close), #000 calc(var(--close) + 30%)), radial-gradient(ellipse at center, rgba(90,0,0,0) 20%, rgba(130,0,0,.75) 100%); }
 	#ecg { z-index: 3; position: fixed; left: 10vw; top: 14vh; width: 80vw; height: 90px; pointer-events: none; opacity: 0; transition: opacity 1s; }
+	#fs { pointer-events: auto; padding: 8px 12px; font-size: 18px; line-height: 1; letter-spacing: 0; margin-top: 6px; }
 	#flash { z-index: 4; position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 	#over { z-index: 5; position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(25, 0, 0, 0.6); text-align: center; }
 	#over.show { display: flex; }
@@ -49,7 +50,7 @@
 <div id="hud">
 	<div id="top">
 		<h1>Russian Roulette</h1>
-		<div id="stats">생존 <b id="score">0</b>회<br>최고 기록 <b id="best">0</b>회</div>
+		<div id="stats"><button id="fs" title="전체화면 (F)" aria-label="전체화면">⛶</button><br>생존 <b id="score">0</b>회<br>최고 기록 <b id="best">0</b>회</div>
 	</div>
 	<div id="bottom">
 		<div id="msg"></div>
@@ -741,6 +742,25 @@ async function bang() {
 
 }
 
+const fsBtn = $( 'fs' );
+function toggleFullscreen() {
+
+	const el = document.documentElement;
+	const on = document.fullscreenElement || document.webkitFullscreenElement;
+	try {
+
+		if ( on ) ( document.exitFullscreen || document.webkitExitFullscreen ).call( document );
+		else ( el.requestFullscreen || el.webkitRequestFullscreen ).call( el );
+
+	} catch ( e ) {}
+
+}
+if ( ! ( document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen ) ) fsBtn.style.display = 'none';
+fsBtn.onclick = e => { toggleFullscreen(); e.currentTarget.blur(); };
+const syncFs = () => { fsBtn.textContent = ( document.fullscreenElement || document.webkitFullscreenElement ) ? '✕' : '⛶'; };
+document.addEventListener( 'fullscreenchange', syncFs );
+document.addEventListener( 'webkitfullscreenchange', syncFs );
+
 spinBtn.onclick = spin;
 pullBtn.onclick = pull;
 againBtn.onclick = () => { audio(); newGame(); };
@@ -749,6 +769,7 @@ addEventListener( 'keydown', e => {
 	if ( e.repeat ) return;
 	if ( e.code === 'Space' ) { e.preventDefault(); if ( state === 'dead' ) { audio(); newGame(); } else pull(); }
 	else if ( e.code === 'KeyS' ) spin();
+	else if ( e.code === 'KeyF' ) toggleFullscreen();
 
 } );
 
