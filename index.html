@@ -35,6 +35,19 @@
 		background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) var(--close), #000 calc(var(--close) + 30%)), radial-gradient(ellipse at center, rgba(90,0,0,0) 20%, rgba(130,0,0,.75) 100%); }
 	#ecg { z-index: 3; position: fixed; left: 10vw; top: 14vh; width: 80vw; height: 90px; pointer-events: none; opacity: 0; transition: opacity 1s; }
 	#fs { pointer-events: auto; padding: 8px 12px; font-size: 18px; line-height: 1; letter-spacing: 0; margin-top: 6px; }
+	#start { z-index: 6; position: fixed; inset: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 14px; padding: 12px; background: rgba(0,0,0,.72); backdrop-filter: blur(4px); text-align: center; }
+	#start.hide { display: none; }
+	#start h2 { margin: 0; font-size: clamp(26px, min(9vw, 11vh), 84px); letter-spacing: .18em; line-height: 1.1; text-shadow: 0 0 24px rgba(200,40,30,.7); }
+	#start p { margin: 0 0 12px; font-size: 18px; }
+	#start .row { justify-content: center; flex-wrap: wrap; }
+	#start button { pointer-events: auto; }
+	button.big { padding: 18px 34px; font-size: 18px; }
+	button.big small { display: block; margin-top: 6px; font-size: 12px; font-weight: 400; opacity: .75; letter-spacing: 0; }
+	#custom { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+	.step { display: flex; align-items: center; gap: 14px; font-size: 18px; }
+	.step span { width: 64px; text-align: right; } .step b { width: 32px; font-size: 26px; color: #ffd27a; }
+	.step button { padding: 6px 14px; font-size: 20px; }
+	#custom small { opacity: .7; font-size: 12px; }
 	#flash { z-index: 4; position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 	#over { z-index: 5; position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(25, 0, 0, 0.6); text-align: center; }
 	#over.show { display: flex; }
@@ -53,14 +66,15 @@
 <div id="hud">
 	<div id="top">
 		<h1>Russian Roulette</h1>
-		<div id="stats"><button id="fs" title="전체화면 (F)" aria-label="전체화면">⛶</button><br>라운드 <b id="round">1</b><br>생존 <b id="score">0</b>회<br>최고 기록 <b id="best">0</b>회</div>
+		<div id="stats"><button id="modeBtn" title="모드 변경" style="pointer-events:auto;padding:8px 12px;font-size:13px;margin:6px 6px 0 0">모드</button><button id="fs" title="전체화면 (F)" aria-label="전체화면">⛶</button><br>라운드 <b id="round">1</b><br>생존 <b id="score">0</b>회<br>최고 기록 <b id="best">0</b>회</div>
 	</div>
 	<div id="bottom">
 		<div id="msg"></div>
 		<div id="shells"></div>
 		<div id="odds"></div>
 		<div class="row">
-			<button id="spin">탄창 돌리기 (S)</button>
+			<button id="reset">탄창 리셋 (R)</button>
+			<button id="shuffle">순서 교체 (S)</button>
 			<button id="pull">방아쇠 당기기 (Space)</button>
 		</div>
 	</div>
@@ -70,10 +84,27 @@
 <div id="dying"></div>
 <canvas id="ecg" width="960" height="90"></canvas>
 <div id="flash"></div>
+<div id="start">
+	<h2>RUSSIAN<br>ROULETTE</h2>
+	<div id="startMain"><button id="startBtn" class="big">시작</button></div>
+	<div id="modes" style="display:none">
+		<p>모드를 선택하세요</p>
+		<div class="row">
+			<button id="modeRandom" class="big">랜덤 모드<small>실탄 1~2발 · 위치 랜덤</small></button>
+			<button id="modeCustom" class="big">커스텀 모드<small>실탄/공포탄 직접 설정</small></button>
+		</div>
+		<div id="custom" style="display:none">
+			<div class="step"><span>실탄</span><button id="liveMinus">−</button><b id="liveVal">2</b><button id="livePlus">+</button></div>
+			<div class="step"><span>공포탄</span><button id="blankMinus">−</button><b id="blankVal">4</b><button id="blankPlus">+</button></div>
+			<small id="customNote">총 6발 중 실탄과 공포탄의 합은 항상 6발입니다</small>
+			<button id="customGo" class="big" style="margin-top:10px">게임 시작</button>
+		</div>
+	</div>
+</div>
 <div id="over">
 	<h2>BANG!</h2>
 	<p id="overText"></p>
-	<button id="again" style="pointer-events:auto">다시 하기</button>
+	<div class="row"><button id="again" style="pointer-events:auto">다시 하기</button><button id="toMenu" style="pointer-events:auto">모드 변경</button></div>
 </div>
 
 <script type="module">
@@ -90,7 +121,7 @@ const STEP = Math.PI * 2 / CHAMBERS;
 // ---------- DOM ----------
 const $ = id => document.getElementById( id );
 const msgEl = $( 'msg' ), oddsEl = $( 'odds' ), scoreEl = $( 'score' ), bestEl = $( 'best' );
-const spinBtn = $( 'spin' ), pullBtn = $( 'pull' ), againBtn = $( 'again' );
+const resetBtn = $( 'reset' ), shuffleBtn = $( 'shuffle' ), pullBtn = $( 'pull' ), againBtn = $( 'again' );
 const overEl = $( 'over' ), overText = $( 'overText' ), flashEl = $( 'flash' );
 
 let best = 0;
@@ -490,6 +521,7 @@ const sfx = {
 // ---------- game state ----------
 let rot = 0; // cylinder angle; chamber k is at the top when rot ≡ -k*STEP
 let cur = 0; // chamber currently under the hammer
+const cfg = { mode: 'random', live: 2 };
 let chambers = []; // 'live' | 'blank' | 'spent' per chamber
 let live = 1, blanks = 5, blanksFired = 0, round = 1;
 const shellsEl = $( 'shells' ), roundEl = $( 'round' );
@@ -597,7 +629,7 @@ function updateUI() {
 	for ( let i = 0; i < live; i ++ ) dots.push( '<span class="l">●</span>' );
 	for ( let i = 0; i < blanks; i ++ ) dots.push( i < blanks - blanksFired ? '<span class="b">●</span>' : '<span class="x">○</span>' );
 	shellsEl.innerHTML = state === 'dead' ? '' : dots.join( ' ' ) + `<small>실탄 ${live} · 공포탄 ${blanks - blanksFired}/${blanks}</small>`;
-	spinBtn.disabled = pullBtn.disabled = state !== 'idle';
+	resetBtn.disabled = shuffleBtn.disabled = pullBtn.disabled = state !== 'idle';
 
 }
 
@@ -620,8 +652,8 @@ const setAim = ( to, dur ) => { const from = aim; return tween( dur, t => { aim 
 
 async function reload() {
 
-	// random number of live rounds (1-5); the rest are blanks, shuffled into the cylinder
-	live = 1 + Math.floor( Math.random() * ( CHAMBERS - 1 ) );
+	// random mode: 1-2 live rounds; custom mode: whatever the player picked. The rest are blanks, shuffled into the cylinder
+	live = cfg.mode === 'custom' ? cfg.live : 1 + Math.floor( Math.random() * 2 );
 	blanks = CHAMBERS - live; blanksFired = 0; pulls = 0;
 	chambers = [ ...Array( live ).fill( 'live' ), ...Array( blanks ).fill( 'blank' ) ];
 	for ( let i = CHAMBERS - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ chambers[ i ], chambers[ j ] ] = [ chambers[ j ], chambers[ i ] ]; }
@@ -652,16 +684,27 @@ async function newGame() {
 
 }
 
-async function spin() {
+async function resetCylinder() { // dump the cylinder and reload a fresh mix
+
+	if ( state !== 'idle' ) return;
+	audio();
+	state = 'busy';
+	setAim( 0, 0.5 );
+	await reload();
+
+}
+
+async function shuffleOrder() { // rearrange the loaded chambers (spent ones included); the layout stays hidden
 
 	if ( state !== 'idle' ) return;
 	audio();
 	state = 'busy'; updateUI();
-	setMsg( '탄창을 돌립니다…' );
+	setMsg( '탄창 순서를 교체합니다…' );
+	for ( let i = CHAMBERS - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ chambers[ i ], chambers[ j ] ] = [ chambers[ j ], chambers[ i ] ]; }
 	cur = Math.floor( Math.random() * CHAMBERS );
 	pulls = 0;
 	await spinTo( cur );
-	setMsg( `다시 섞었습니다. 실탄일 확률은 ${live}/${CHAMBERS}로 초기화됩니다.` );
+	setMsg( `순서가 바뀌었습니다. 실탄일 확률은 ${live}/${CHAMBERS}로 초기화됩니다.` );
 	state = 'idle'; updateUI();
 
 }
@@ -807,14 +850,50 @@ const syncFs = () => { fsBtn.textContent = ( document.fullscreenElement || docum
 document.addEventListener( 'fullscreenchange', syncFs );
 document.addEventListener( 'webkitfullscreenchange', syncFs );
 
-spinBtn.onclick = spin;
+resetBtn.onclick = resetCylinder;
+shuffleBtn.onclick = shuffleOrder;
+
+// ---------- start / mode menu ----------
+const startEl = $( 'start' ), modesEl = $( 'modes' ), customEl = $( 'custom' ), startMain = $( 'startMain' );
+function showMenu( modes ) {
+
+	state = 'menu'; updateUI();
+	overEl.classList.remove( 'show' );
+	startEl.classList.remove( 'hide' );
+	startMain.style.display = modes ? 'none' : '';
+	modesEl.style.display = modes ? '' : 'none';
+	customEl.style.display = 'none';
+
+}
+function beginGame( mode ) {
+
+	audio();
+	cfg.mode = mode;
+	startEl.classList.add( 'hide' );
+	newGame();
+
+}
+function syncCustom() { $( 'liveVal' ).textContent = cfg.live; $( 'blankVal' ).textContent = CHAMBERS - cfg.live; }
+const adjust = d => { cfg.live = Math.max( 1, Math.min( CHAMBERS - 1, cfg.live + d ) ); syncCustom(); };
+$( 'startBtn' ).onclick = () => { audio(); showMenu( true ); };
+$( 'modeRandom' ).onclick = () => beginGame( 'random' );
+$( 'modeCustom' ).onclick = () => { customEl.style.display = 'flex'; syncCustom(); };
+$( 'liveMinus' ).onclick = () => adjust( - 1 );
+$( 'livePlus' ).onclick = () => adjust( 1 );
+$( 'blankMinus' ).onclick = () => adjust( 1 ); // fewer blanks = more live rounds
+$( 'blankPlus' ).onclick = () => adjust( - 1 );
+$( 'customGo' ).onclick = () => beginGame( 'custom' );
+$( 'toMenu' ).onclick = () => showMenu( true );
+$( 'modeBtn' ).onclick = e => { e.currentTarget.blur(); if ( state === 'idle' || state === 'dead' ) showMenu( true ); };
 pullBtn.onclick = pull;
 againBtn.onclick = () => { audio(); newGame(); };
 addEventListener( 'keydown', e => {
 
 	if ( e.repeat ) return;
+	if ( state === 'menu' ) return;
 	if ( e.code === 'Space' ) { e.preventDefault(); if ( state === 'dead' ) { audio(); newGame(); } else pull(); }
-	else if ( e.code === 'KeyS' ) spin();
+	else if ( e.code === 'KeyS' ) shuffleOrder();
+	else if ( e.code === 'KeyR' ) resetCylinder();
 	else if ( e.code === 'KeyF' ) toggleFullscreen();
 
 } );
@@ -914,7 +993,7 @@ renderer.setAnimationLoop( () => {
 
 } );
 
-newGame();
+showMenu( false );
 </script>
 </body>
 </html>
