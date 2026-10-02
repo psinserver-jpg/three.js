@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>러시안 룰렛</title>
+<style>
+	:root { --red: #c0392b; --fg: #e8e2d6; }
+	* { box-sizing: border-box; }
+	html, body { margin: 0; height: 100%; overflow: hidden; background: #050505; color: var(--fg); font-family: "Noto Sans KR", system-ui, sans-serif; }
+	canvas { display: block; }
+	#hud { z-index: 2; position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
+	#top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+	h1 { margin: 0; font-size: 22px; letter-spacing: 0.2em; text-transform: uppercase; text-shadow: 0 2px 8px #000; }
+	#stats { text-align: right; font-size: 14px; line-height: 1.6; text-shadow: 0 2px 6px #000; }
+	#stats b { font-size: 20px; color: #ffd27a; }
+	#bottom { display: flex; flex-direction: column; align-items: center; gap: 14px; padding-bottom: 8px; }
+	#msg { min-height: 1.6em; font-size: 18px; text-align: center; text-shadow: 0 2px 8px #000; }
+	#shells { font-size: 22px; letter-spacing: 0.2em; min-height: 1.4em; text-shadow: 0 2px 8px #000; }
+	#shells .l { color: #ff4b3a; } #shells .b { color: #5b8dff; } #shells .x { color: #555; }
+	#shells small { font-size: 13px; letter-spacing: 0.05em; margin-left: 10px; opacity: .85; }
+	#odds { font-size: 13px; opacity: 0.8; }
+	.row { display: flex; gap: 12px; pointer-events: auto; }
+	button { font: inherit; font-weight: 700; letter-spacing: 0.08em; padding: 14px 26px; border-radius: 8px; border: 1px solid #5a5248; background: #1c1a17; color: var(--fg); cursor: pointer; transition: transform .1s, background .15s, opacity .2s; }
+	button:hover:not(:disabled) { background: #2a2622; transform: translateY(-1px); }
+	button:disabled { opacity: 0.35; cursor: default; }
+	button#pull { background: var(--red); border-color: #e0584a; }
+	button#pull:hover:not(:disabled) { background: #d94434; }
+	#vig { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,.85) 100%); transition: transform .12s ease-out, opacity .3s; }
+	#vig.beat { transform: scale(1.06); }
+	#vig::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(120,0,0,0) 50%, rgba(160,0,0,.55) 100%); opacity: var(--fear, 0); transition: opacity .5s; }
+	#grain { position: fixed; inset: -50%; pointer-events: none; opacity: .09; mix-blend-mode: overlay; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); animation: grain .5s steps(5) infinite; }
+	@keyframes grain { 0% { transform: translate(0,0); } 20% { transform: translate(-6%,4%); } 40% { transform: translate(5%,-7%); } 60% { transform: translate(-4%,-3%); } 80% { transform: translate(7%,6%); } 100% { transform: translate(0,0); } }
+	#dying { z-index: 3; position: fixed; inset: 0; pointer-events: none; opacity: 0; --close: 120%; transition: opacity 1s;
+		background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) var(--close), #000 calc(var(--close) + 30%)), radial-gradient(ellipse at center, rgba(90,0,0,0) 20%, rgba(130,0,0,.75) 100%); }
+	#ecg { z-index: 3; position: fixed; left: 10vw; top: 14vh; width: 80vw; height: 90px; pointer-events: none; opacity: 0; transition: opacity 1s; }
+	#fs { pointer-events: auto; padding: 8px 12px; font-size: 18px; line-height: 1; letter-spacing: 0; margin-top: 6px; }
+	#start { z-index: 6; position: fixed; inset: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 14px; padding: 12px; background: rgba(0,0,0,.72); backdrop-filter: blur(4px); text-align: center; }
+	#start.hide { display: none; }
+	#start h2 { margin: 0; font-size: clamp(26px, min(9vw, 11vh), 84px); letter-spacing: .18em; line-height: 1.1; text-shadow: 0 0 24px rgba(200,40,30,.7); }
+	#start p { margin: 0 0 12px; font-size: 18px; }
+	#start .row { justify-content: center; flex-wrap: wrap; }
+	#start button { pointer-events: auto; }
+	button.big { padding: 18px 34px; font-size: 18px; }
+	button.big small { display: block; margin-top: 6px; font-size: 12px; font-weight: 400; opacity: .75; letter-spacing: 0; }
+	#custom { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+	.step { display: flex; align-items: center; gap: 14px; font-size: 18px; }
+	.step span { width: 64px; text-align: right; } .step b { width: 32px; font-size: 26px; color: #ffd27a; }
+	.step button { padding: 6px 14px; font-size: 20px; }
+	#custom small { opacity: .7; font-size: 12px; }
+	.bsonly { display: none; }
+	body.bs #bsCtl { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+	body.bs #bsTop { display: block; position: fixed; left: 16px; top: 56px; z-index: 2; font-size: 18px; text-shadow: 0 2px 8px #000; pointer-events: none; }
+	body.bs #classic { display: none; }
+	#bsCtl .row { flex-wrap: wrap; justify-content: center; }
+	#pRow { font-size: 20px; text-shadow: 0 2px 8px #000; } #pRow .x, #bsTop .x { color: #555; }
+	#pHp, #dHp { color: #ff5a4a; letter-spacing: 2px; }
+	#pStatus, #dStatus { font-size: 13px; color: #ffd27a; }
+	button.item { padding: 8px 12px; font-size: 13px; letter-spacing: 0; }
+	button#shootDealer { background: var(--red); border-color: #e0584a; }
+	#dItems { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-width: 340px; }
+	#dItems span { font-size: 12px; padding: 3px 8px; border: 1px solid #5a5248; border-radius: 6px; background: rgba(0,0,0,.45); }
+	.sh { letter-spacing: 3px; }
+	#flash { z-index: 4; position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+	#over { z-index: 5; position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(25, 0, 0, 0.6); text-align: center; }
+	#over.show { display: flex; }
+	#over h2 { margin: 0; font-size: clamp(44px, 12vw, 110px); letter-spacing: 0.12em; color: #fff; text-shadow: 0 0 30px #f00; }
+	#over p { margin: 0 0 12px; font-size: 20px; }
+	@media (max-width: 520px) { h1 { font-size: 16px; } button { padding: 12px 18px; } }
+</style>
+<script type="importmap">
+{ "imports": {
+	"three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+	"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="bsTop" class="bsonly"><div>딜러 <span id="dHp"></span> <span id="dStatus"></span></div><div id="dItems"></div></div>
+<div id="hud">
+	<div id="top">
+		<h1>Russian Roulette</h1>
+		<div id="stats"><button id="modeBtn" title="모드 변경" style="pointer-events:auto;padding:8px 12px;font-size:13px;margin:6px 6px 0 0">모드</button><button id="fs" title="전체화면 (F)" aria-label="전체화면">⛶</button><br>라운드 <b id="round">1</b><br>생존 <b id="score">0</b>회<br>최고 기록 <b id="best">0</b>회</div>
+	</div>
+	<div id="bottom">
+		<div id="msg"></div>
+		<div id="shells"></div>
+		<div id="odds"></div>
+		<div id="bsCtl" class="bsonly">
+			<div id="pRow">나 <span id="pHp"></span> <span id="pStatus"></span></div>
+			<div id="pItems" class="row"></div>
+			<div class="row"><button id="shootDealer">딜러에게 발사</button><button id="shootSelf">나에게 발사</button></div>
+		</div>
+		<div class="row" id="classic">
+			<button id="reset">탄창 리셋 (R)</button>
+			<button id="shuffle">순서 교체 (S)</button>
+			<button id="pull">방아쇠 당기기 (Space)</button>
+		</div>
+	</div>
+</div>
+<div id="vig"></div>
+<div id="grain"></div>
+<div id="dying"></div>
+<canvas id="ecg" width="960" height="90"></canvas>
+<div id="flash"></div>
+<div id="start">
+	<h2>RUSSIAN<br>ROULETTE</h2>
+	<div id="startMain"><button id="startBtn" class="big">시작</button></div>
+	<div id="modes" style="display:none">
+		<p>모드를 선택하세요</p>
+		<div class="row">
+			<button id="modeRandom" class="big">랜덤 모드<small>실탄 1~2발 · 위치 랜덤</small></button>
+			<button id="modeCustom" class="big">커스텀 모드<small>실탄/공포탄 직접 설정</small></button>
+			<button id="modeBuck" class="big">벅샷 모드<small>1인칭 테이블 · 딜러와 대결 · 아이템</small></button>
+		</div>
+		<div id="custom" style="display:none">
+			<div class="step"><span>실탄</span><button id="liveMinus">−</button><b id="liveVal">2</b><button id="livePlus">+</button></div>
+			<div class="step"><span>공포탄</span><button id="blankMinus">−</button><b id="blankVal">4</b><button id="blankPlus">+</button></div>
+			<small id="customNote">총 6발 중 실탄과 공포탄의 합은 항상 6발입니다</small>
+			<button id="customGo" class="big" style="margin-top:10px">게임 시작</button>
+		</div>
+	</div>
+</div>
+<div id="over">
+	<h2 id="overTitle">BANG!</h2>
+	<p id="overText"></p>
+	<div class="row"><button id="again" style="pointer-events:auto">다시 하기</button><button id="toMenu" style="pointer-events:auto">모드 변경</button></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const CHAMBERS = 6;
+const STEP = Math.PI * 2 / CHAMBERS;
+
+// ---------- DOM ----------
+const $ = id => document.getElementById( id );
+const msgEl = $( 'msg' ), oddsEl = $( 'odds' ), scoreEl = $( 'score' ), bestEl = $( 'best' );
+const overTitle = $( 'overTitle' ), resetBtn = $( 'reset' ), shuffleBtn = $( 'shuffle' ), pullBtn = $( 'pull' ), againBtn = $( 'again' );
+const overEl = $( 'over' ), overText = $( 'overText' ), flashEl = $( 'flash' );
+
+let best = 0;
+try { best = parseInt( localStorage.getItem( 'roulette-best' ) || '0', 10 ) || 0; } catch ( e ) {}
+bestEl.textContent = best;
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer( { antialias: true } );
+renderer.setPixelRatio( Math.min( devicePixelRatio, 2 ) );
+renderer.setSize( innerWidth, innerHeight );
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.prepend( renderer.domElement );
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color( 0x070605 );
+scene.fog = new THREE.Fog( 0x070605, 8, 22 );
+const pmrem = new THREE.PMREMGenerator( renderer );
+scene.environment = pmrem.fromScene( new RoomEnvironment(), 0.04 ).texture;
+scene.environmentIntensity = 0.55;
+
+const camera = new THREE.PerspectiveCamera( 40, innerWidth / innerHeight, 0.1, 50 );
+const camBase = new THREE.Vector3( -4.2, 3.0, 9.2 );
+const camTarget = new THREE.Vector3( 0.75, -0.75, 0 );
+const bottomEl = document.getElementById( 'bottom' );
+const camDir = camBase.clone().sub( camTarget ).normalize();
+
+// pull the camera back (or in) so the whole revolver fits any window shape, from ultra-wide monitors to portrait phones
+function fitView() {
+
+	const t = Math.tan( THREE.MathUtils.degToRad( 40 / 2 ) ); // base vertical fov
+	const halfW = 3.7, halfH = 2.0; // gun half-extents as seen from the side-front angle
+	const topH = 60, bottomH = bottomEl.offsetHeight + 24; // keep the gun clear of the HUD
+	const usableH = Math.max( innerHeight - topH - bottomH, innerHeight * 0.4 );
+	const d = Math.max( halfH / t * ( innerHeight / usableH ), halfW / ( t * camera.aspect ) ) * 1.12;
+	camBase.copy( camTarget ).addScaledVector( camDir, d );
+	scene.fog.near = d * 1.0; scene.fog.far = Math.max( d * 2.4, 32 );
+	camera.setViewOffset( innerWidth, innerHeight, 0, ( bottomH - topH ) / 2, innerWidth, innerHeight ); // nudge the picture up into the free space
+	camera.updateProjectionMatrix();
+
+}
+
+const spot = new THREE.SpotLight( 0xffe2b0, 320, 0, 0.5, 0.7, 2 );
+spot.position.set( -2, 7, 4 );
+spot.target.position.set( 0.5, 0, 0 );
+spot.castShadow = true;
+spot.shadow.mapSize.set( 2048, 2048 );
+spot.shadow.bias = - 0.0004;
+scene.add( spot, spot.target );
+const rim = new THREE.DirectionalLight( 0x6f8cff, 0.6 );
+rim.position.set( 5, 3, - 4 );
+scene.add( rim );
+
+// ---------- procedural textures ----------
+function canvasTex( w, h, draw, srgb = true ) {
+
+	const c = document.createElement( 'canvas' );
+	c.width = w; c.height = h;
+	draw( c.getContext( '2d' ), w, h );
+	const t = new THREE.CanvasTexture( c );
+	t.wrapS = t.wrapT = THREE.RepeatWrapping;
+	t.anisotropy = 8;
+	if ( srgb ) t.colorSpace = THREE.SRGBColorSpace;
+	return t;
+
+}
+function woodDraw( base, dark ) {
+
+	return ( g, w, h ) => {
+
+		g.fillStyle = base; g.fillRect( 0, 0, w, h );
+		for ( let i = 0; i < 260; i ++ ) {
+
+			g.strokeStyle = `rgba(${dark},${0.04 + Math.random() * 0.12})`;
+			g.lineWidth = 0.5 + Math.random() * 2.5;
+			const y = Math.random() * h;
+			g.beginPath(); g.moveTo( 0, y );
+			for ( let x = 0; x <= w; x += 32 ) g.lineTo( x, y + Math.sin( x * 0.01 + i ) * 5 + ( Math.random() - 0.5 ) * 1.5 );
+			g.stroke();
+
+		}
+
+	};
+
+}
+const tableTex = canvasTex( 1024, 1024, woodDraw( '#3a2414', '10,5,2' ) );
+tableTex.repeat.set( 5, 5 );
+const gripTex = canvasTex( 512, 512, ( g, w, h ) => {
+
+	woodDraw( '#6b3d1e', '30,12,4' )( g, w, h );
+	g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2;
+	for ( let i = - h; i < w + h; i += 22 ) {
+
+		g.beginPath(); g.moveTo( i, 0 ); g.lineTo( i + h, h ); g.stroke();
+		g.beginPath(); g.moveTo( i, h ); g.lineTo( i + h, 0 ); g.stroke();
+
+	}
+
+} );
+gripTex.repeat.set( 0.6, 0.6 );
+const brushTex = canvasTex( 512, 512, ( g, w, h ) => {
+
+	g.fillStyle = '#888'; g.fillRect( 0, 0, w, h );
+	for ( let i = 0; i < 2500; i ++ ) {
+
+		const v = 100 + Math.random() * 90 | 0;
+		g.strokeStyle = `rgba(${v},${v},${v},.4)`; g.lineWidth = 1;
+		const y = Math.random() * h, x = Math.random() * w;
+		g.beginPath(); g.moveTo( x, y ); g.lineTo( x + 40 + Math.random() * 120, y ); g.stroke();
+
+	}
+
+}, false );
+
+// table
+const table = new THREE.Mesh(
+	new THREE.PlaneGeometry( 40, 40 ),
+	new THREE.MeshStandardMaterial( { map: tableTex, bumpMap: tableTex, bumpScale: 0.4, roughness: 0.55, metalness: 0 } )
+);
+table.rotation.x = - Math.PI / 2;
+table.position.y = - 2.95;
+table.receiveShadow = true;
+scene.add( table );
+
+// ---------- revolver ----------
+const steel = new THREE.MeshPhysicalMaterial( { color: 0x3a404b, metalness: 1, roughness: 0.2, roughnessMap: brushTex, envMapIntensity: 2.4, clearcoat: 1, clearcoatRoughness: 0.08 } ); // deep blued carbon steel
+const darkSteel = new THREE.MeshPhysicalMaterial( { color: 0x23262c, metalness: 1, roughness: 0.32, roughnessMap: brushTex, envMapIntensity: 1.8, clearcoat: 0.6 } );
+const blackOxide = new THREE.MeshStandardMaterial( { color: 0x151619, metalness: 0.6, roughness: 0.45 } );
+const wood = new THREE.MeshStandardMaterial( { color: 0xffffff, map: gripTex, bumpMap: gripTex, bumpScale: 1.2, roughness: 0.5, metalness: 0.05 } );
+const hole = new THREE.MeshBasicMaterial( { color: 0x000000 } );
+const brass = new THREE.MeshStandardMaterial( { color: 0xe0b050, metalness: 1, roughness: 0.2, envMapIntensity: 1.8 } );
+
+function mesh( geo, mat, x = 0, y = 0, z = 0, parent ) {
+
+	const m = new THREE.Mesh( geo, mat );
+	m.position.set( x, y, z );
+	m.castShadow = m.receiveShadow = true;
+	( parent || gun ).add( m );
+	return m;
+
+}
+function extrude( shape, depth, bevel ) {
+
+	const g = new THREE.ExtrudeGeometry( shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4, curveSegments: 16 } );
+	g.translate( 0, 0, - depth / 2 );
+	return g;
+
+}
+
+const gun = new THREE.Group();
+scene.add( gun );
+
+// cylinder (rotates around X axis)
+const cyl = new THREE.Group();
+gun.add( cyl );
+const R_RING = 0.46;
+// lathed cylinder with chamfered faces
+const cylProfile = [ [ 0, - 0.6 ], [ 0.68, - 0.6 ], [ 0.765, - 0.53 ], [ 0.78, - 0.46 ], [ 0.78, 0.48 ], [ 0.75, 0.56 ], [ 0.66, 0.6 ], [ 0, 0.6 ] ].map( ( [ r, y ] ) => new THREE.Vector2( r, y ) );
+mesh( new THREE.LatheGeometry( cylProfile, 96 ).rotateZ( Math.PI / 2 ), steel, 0, 0, 0, cyl );
+const liveMat = new THREE.MeshStandardMaterial( { color: 0xd01818, metalness: 0.2, roughness: 0.4, emissive: 0x300000 } );
+const blankMat = new THREE.MeshStandardMaterial( { color: 0x3b6fd8, metalness: 0.2, roughness: 0.4, emissive: 0x0a1230 } );
+const rounds = [];
+for ( let i = 0; i < CHAMBERS; i ++ ) {
+
+	const a = i * STEP, y = R_RING * Math.cos( a ), z = R_RING * Math.sin( a );
+	const h = new THREE.Mesh( new THREE.CylinderGeometry( 0.17, 0.17, 1.24, 24 ).rotateZ( Math.PI / 2 ), hole );
+	h.position.set( 0, y, z );
+	cyl.add( h );
+	// chamber rim
+	for ( const sx of [ - 0.61, 0.61 ] ) mesh( new THREE.TorusGeometry( 0.175, 0.02, 8, 24 ).rotateY( Math.PI / 2 ), darkSteel, sx, y, z, cyl );
+	const r = new THREE.Group();
+	r.position.set( - 0.55, y, z );
+	mesh( new THREE.CylinderGeometry( 0.14, 0.14, 0.22, 24 ).rotateZ( Math.PI / 2 ), brass, 0, 0, 0, r );
+	mesh( new THREE.CylinderGeometry( 0.06, 0.06, 0.02, 16 ).rotateZ( Math.PI / 2 ), darkSteel, - 0.115, 0, 0, r ); // primer
+	r.userData.cap = mesh( new THREE.CylinderGeometry( 0.135, 0.135, 0.03, 24 ).rotateZ( Math.PI / 2 ), liveMat, - 0.105, 0, 0, r );
+	r.visible = false;
+	cyl.add( r );
+	rounds.push( r );
+	// flutes
+	const fl = mesh( new THREE.CapsuleGeometry( 0.085, 0.62, 6, 16 ).rotateZ( Math.PI / 2 ), darkSteel, 0.06, 0.74 * Math.cos( a + STEP / 2 ), 0.74 * Math.sin( a + STEP / 2 ), cyl ); // flute
+	fl.scale.set( 1, 1, 0.75 );
+	const stop = mesh( new THREE.BoxGeometry( 0.12, 0.05, 0.06 ), blackOxide, - 0.2, 0.775 * Math.cos( a ), 0.775 * Math.sin( a ), cyl ); stop.rotation.x = - a; // cylinder stop notch
+
+}
+mesh( new THREE.CylinderGeometry( 0.12, 0.12, 1.5, 16 ).rotateZ( Math.PI / 2 ), darkSteel, 0, 0, 0, cyl ); // center pin
+
+// ---- Smith & Wesson Model 10 style .38 revolver (K-frame, 4" tapered barrel, fixed sights, blued, round-butt walnut grips) ----
+// built from the real gun's proportions: 1 inch ≈ 1.08 units (cylinder 1.44" × 1.56")
+cyl.scale.x = 1.4;
+function extrudeR( shape, depth, bevel, segs = 5 ) {
+
+	const g = new THREE.ExtrudeGeometry( shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: segs, curveSegments: 40 } );
+	g.translate( 0, 0, - depth / 2 );
+	return g;
+
+}
+const rrect = ( x0, y0, x1, y1, r, path = new THREE.Path() ) => {
+
+	path.moveTo( x0 + r, y0 ); path.lineTo( x1 - r, y0 ); path.quadraticCurveTo( x1, y0, x1, y0 + r ); path.lineTo( x1, y1 - r ); path.quadraticCurveTo( x1, y1, x1 - r, y1 );
+	path.lineTo( x0 + r, y1 ); path.quadraticCurveTo( x0, y1, x0, y1 - r ); path.lineTo( x0, y0 + r ); path.quadraticCurveTo( x0, y0, x0 + r, y0 );
+	return path;
+
+};
+const FW = 0.62; // frame width (the cylinder bulges past it on both sides, like the real thing)
+
+// frame: top strap, recoil shield, hammer hump, grip frame, trigger guard, yoke
+const fs = new THREE.Shape();
+fs.moveTo( 1.25, 0.98 );
+fs.lineTo( - 1.1, 0.98 );
+fs.quadraticCurveTo( - 1.55, 0.98, - 1.85, 0.86 );
+fs.quadraticCurveTo( - 2.2, 0.72, - 2.45, 0.66 ); // hammer slot area
+fs.quadraticCurveTo( - 2.85, 0.6, - 3.0, 0.18 ); // top of the back strap ("horn")
+fs.bezierCurveTo( - 3.35, - 0.9, - 3.72, - 2.5, - 3.68, - 3.42 ); // back strap, raked back like the real grip
+fs.quadraticCurveTo( - 3.6, - 3.86, - 3.12, - 3.88 ); // round butt
+fs.quadraticCurveTo( - 2.68, - 3.88, - 2.64, - 3.5 );
+fs.bezierCurveTo( - 2.52, - 2.9, - 2.52, - 1.85, - 2.05, - 1.1 ); // front strap
+fs.bezierCurveTo( - 2.05, - 2.08, - 0.42, - 2.08, - 0.32, - 1.04 ); // trigger guard
+fs.lineTo( - 0.25, - 0.98 );
+fs.lineTo( 0.92, - 0.98 ); // yoke
+fs.quadraticCurveTo( 1.18, - 0.96, 1.22, - 0.55 );
+fs.lineTo( 1.25, - 0.15 );
+fs.closePath();
+const guardHole = new THREE.Path(); guardHole.absellipse( - 1.2, - 1.36, 0.52, 0.32, 0, Math.PI * 2, true );
+fs.holes.push( rrect( - 0.9, - 0.8, 0.9, 0.84, 0.06 ), guardHole );
+mesh( extrudeR( fs, FW - 0.12, 0.06 ), steel );
+
+// fixed sights: groove along the top strap ending in a square rear notch
+mesh( new THREE.BoxGeometry( 2.2, 0.025, 0.1 ), blackOxide, 0.05, 1.035, 0 );
+mesh( new THREE.BoxGeometry( 0.14, 0.06, 0.12 ), blackOxide, - 1.05, 1.02, 0 );
+
+// left side plate screws and the cylinder release thumbpiece (camera sees the left side)
+const ZS = FW / 2 + 0.005;
+for ( const [ x, y ] of [ [ - 1.55, 0.4 ], [ - 0.95, - 0.62 ], [ - 1.85, - 0.72 ], [ - 2.3, 0.35 ] ] ) {
+
+	mesh( new THREE.CylinderGeometry( 0.05, 0.05, 0.02, 20 ).rotateX( Math.PI / 2 ), darkSteel, x, y, ZS );
+	mesh( new THREE.BoxGeometry( 0.085, 0.012, 0.012 ), blackOxide, x, y, ZS + 0.012 ).rotation.z = 0.5 + x;
+
+}
+const tp = new THREE.Shape(); // thumbpiece
+tp.moveTo( - 1.42, 0.3 ); tp.lineTo( - 1.08, 0.3 ); tp.quadraticCurveTo( - 1.0, 0.42, - 1.08, 0.54 ); tp.lineTo( - 1.42, 0.54 ); tp.quadraticCurveTo( - 1.48, 0.42, - 1.42, 0.3 );
+mesh( extrudeR( tp, 0.08, 0.025, 3 ), darkSteel, 0, 0, ZS + 0.04 );
+for ( let i = 0; i < 6; i ++ ) mesh( new THREE.BoxGeometry( 0.012, 0.2, 0.012 ), blackOxide, - 1.36 + i * 0.05, 0.42, ZS + 0.105 );
+
+// round-butt walnut service grips with checkering and a silver medallion
+const gs = new THREE.Shape();
+gs.moveTo( - 2.62, 0.02 );
+gs.quadraticCurveTo( - 2.9, - 0.1, - 2.96, - 0.3 );
+gs.bezierCurveTo( - 3.27, - 1.1, - 3.62, - 2.5, - 3.59, - 3.38 );
+gs.quadraticCurveTo( - 3.52, - 3.78, - 3.12, - 3.79 );
+gs.quadraticCurveTo( - 2.76, - 3.79, - 2.72, - 3.47 );
+gs.bezierCurveTo( - 2.62, - 2.9, - 2.62, - 1.9, - 2.2, - 1.2 );
+gs.quadraticCurveTo( - 2.1, - 0.9, - 2.18, - 0.55 );
+gs.quadraticCurveTo( - 2.3, - 0.12, - 2.62, 0.02 );
+for ( const sz of [ - 1, 1 ] ) {
+
+	mesh( extrudeR( gs, 0.1, 0.09, 6 ), wood, 0, 0, sz * ( FW / 2 + 0.03 ) );
+	mesh( new THREE.CylinderGeometry( 0.08, 0.08, 0.02, 24 ).rotateX( Math.PI / 2 ), new THREE.MeshStandardMaterial( { color: 0xb8bcc2, metalness: 1, roughness: 0.25 } ), - 3.02, - 1.2, sz * ( FW / 2 + 0.17 ) );
+
+}
+
+// 4" tapered barrel with a pinned half-moon front sight
+const MZ = 5.2;
+mesh( new THREE.CylinderGeometry( 0.27, 0.32, MZ - 1.25, 48 ).rotateZ( Math.PI / 2 ), steel, ( MZ + 1.25 ) / 2, R_RING, 0 );
+mesh( new THREE.CylinderGeometry( 0.37, 0.37, 0.22, 48 ).rotateZ( Math.PI / 2 ), steel, 1.33, R_RING, 0 ); // barrel shank
+const fsight = new THREE.Shape();
+fsight.moveTo( MZ - 0.62, R_RING + 0.22 ); fsight.lineTo( MZ - 0.06, R_RING + 0.22 ); fsight.lineTo( MZ - 0.06, R_RING + 0.42 ); fsight.quadraticCurveTo( MZ - 0.3, R_RING + 0.44, MZ - 0.62, R_RING + 0.22 );
+mesh( extrudeR( fsight, 0.08, 0.012, 2 ), steel );
+mesh( new THREE.CylinderGeometry( 0.3, 0.3, 0.02, 48 ).rotateZ( Math.PI / 2 ), darkSteel, MZ + 0.01, R_RING, 0 ); // crowned muzzle face
+const bore = new THREE.Mesh( new THREE.CircleGeometry( 0.19, 32 ).rotateY( Math.PI / 2 ), hole );
+bore.position.set( MZ + 0.025, R_RING, 0 );
+gun.add( bore );
+
+// exposed ejector rod under the barrel, knurled tip locking into the front lug
+mesh( new THREE.CylinderGeometry( 0.085, 0.085, 2.1, 20 ).rotateZ( Math.PI / 2 ), steel, 0.84 + 1.05, 0, 0 );
+mesh( new THREE.CylinderGeometry( 0.13, 0.13, 0.22, 24 ).rotateZ( Math.PI / 2 ), darkSteel, 2.95, 0, 0 );
+for ( let i = 0; i < 6; i ++ ) mesh( new THREE.TorusGeometry( 0.13, 0.008, 4, 24 ).rotateY( Math.PI / 2 ), blackOxide, 2.86 + i * 0.035, 0, 0 );
+const lug = new THREE.Shape();
+lug.moveTo( 3.04, R_RING - 0.15 ); lug.lineTo( 3.62, R_RING - 0.13 ); lug.quadraticCurveTo( 3.5, - 0.18, 3.12, - 0.16 ); lug.lineTo( 3.06, - 0.05 ); lug.closePath();
+mesh( extrudeR( lug, 0.16, 0.04, 3 ), steel );
+
+// trigger: smooth curved blade hanging in the guard
+const trigger = new THREE.Group();
+trigger.position.set( - 1.3, - 0.98, 0 );
+gun.add( trigger );
+const ts = new THREE.Shape();
+ts.moveTo( - 0.07, 0.06 ); ts.quadraticCurveTo( 0.16, - 0.22, 0.03, - 0.6 ); ts.lineTo( - 0.07, - 0.56 ); ts.quadraticCurveTo( 0.04, - 0.24, - 0.18, 0.06 ); ts.closePath();
+mesh( extrudeR( ts, 0.16, 0.025, 3 ), steel, 0, 0, 0, trigger );
+
+// hammer: rises from the frame, spur sweeps back over the web of the hand
+const hammer = new THREE.Group();
+hammer.position.set( - 2.25, 0.46, 0 );
+hammer.scale.set( 1.2, 1.2, 1 );
+gun.add( hammer );
+const hs = new THREE.Shape();
+hs.moveTo( 0.14, - 0.12 ); hs.lineTo( 0.18, 0.32 ); hs.quadraticCurveTo( 0.12, 0.56, - 0.2, 0.64 ); hs.quadraticCurveTo( - 0.52, 0.72, - 0.62, 0.62 );
+hs.quadraticCurveTo( - 0.42, 0.5, - 0.18, 0.38 ); hs.lineTo( - 0.12, - 0.12 ); hs.closePath();
+mesh( extrudeR( hs, 0.18, 0.035, 3 ), steel, 0, 0, 0, hammer );
+for ( let i = 0; i < 7; i ++ ) mesh( new THREE.BoxGeometry( 0.016, 0.012, 0.26 ), blackOxide, - 0.52 + i * 0.05, 0.66 + Math.sin( i * 0.4 ) * 0.02, 0, hammer ).rotation.z = 0.3;
+
+gun.scale.setScalar( 0.72 );
+const GUN_X = 0.55;
+gun.position.set( GUN_X, 0, 0 );
+
+// muzzle flash
+function glowTexture() {
+
+	const c = document.createElement( 'canvas' );
+	c.width = c.height = 128;
+	const g = c.getContext( '2d' );
+	const grd = g.createRadialGradient( 64, 64, 0, 64, 64, 64 );
+	grd.addColorStop( 0, 'rgba(255,255,255,1)' );
+	grd.addColorStop( 0.25, 'rgba(255,200,90,0.9)' );
+	grd.addColorStop( 1, 'rgba(255,90,0,0)' );
+	g.fillStyle = grd;
+	g.fillRect( 0, 0, 128, 128 );
+	return new THREE.CanvasTexture( c );
+
+}
+const flashSprite = new THREE.Sprite( new THREE.SpriteMaterial( { map: glowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true } ) );
+flashSprite.position.set( MZ + 0.4, R_RING, 0 );
+flashSprite.visible = false;
+gun.add( flashSprite );
+const flashLight = new THREE.PointLight( 0xffa040, 0, 12 );
+flashLight.position.set( MZ + 0.4, R_RING, 0 );
+gun.add( flashLight );
+
+// smoke / sparks / dust
+function softTexture( stops ) {
+
+	return canvasTex( 128, 128, ( g ) => {
+
+		const grd = g.createRadialGradient( 64, 64, 0, 64, 64, 64 );
+		stops.forEach( ( [ o, c ] ) => grd.addColorStop( o, c ) );
+		g.fillStyle = grd; g.fillRect( 0, 0, 128, 128 );
+
+	} );
+
+}
+const smokeTex = softTexture( [ [ 0, 'rgba(200,200,200,.9)' ], [ 0.5, 'rgba(150,150,150,.45)' ], [ 1, 'rgba(120,120,120,0)' ] ] );
+const sparkTex = softTexture( [ [ 0, 'rgba(255,255,255,1)' ], [ 0.3, 'rgba(255,190,80,.9)' ], [ 1, 'rgba(255,100,0,0)' ] ] );
+const particles = [];
+function emit( tex, blending, pos, vel, size, grow, life, opacity, color = 0xffffff ) {
+
+	const sp = new THREE.Sprite( new THREE.SpriteMaterial( { map: tex, blending, depthWrite: false, transparent: true, opacity, color, fog: true } ) );
+	sp.position.copy( pos ); sp.scale.setScalar( size );
+	scene.add( sp );
+	particles.push( { sp, vel, grow, life, age: 0, op: opacity } );
+
+}
+const muzzleWorld = () => gun.localToWorld( new THREE.Vector3( MZ + 0.1, R_RING, 0 ) );
+function burst( k = 1 ) {
+
+	const p = muzzleWorld();
+	for ( let i = 0; i < Math.round( 14 * k ); i ++ ) emit( smokeTex, THREE.NormalBlending, p.clone(), new THREE.Vector3( Math.random() * 0.5, 0.2 + Math.random() * 0.8, ( Math.random() - 0.5 ) * 1.2 ), 0.3 + Math.random() * 0.3, 0.5 + Math.random() * 0.5, 2.5 + Math.random() * 2, 0.28 );
+	for ( let i = 0; i < Math.round( 40 * k ); i ++ ) emit( sparkTex, THREE.AdditiveBlending, p.clone(), new THREE.Vector3( 0.5 + Math.random() * 3, ( Math.random() - 0.5 ) * 4, ( Math.random() - 0.5 ) * 4 ), 0.08 + Math.random() * 0.1, - 0.05, 0.25 + Math.random() * 0.5, 1 );
+
+}
+function trickleSmoke( dt ) { // wisps rising from the barrel after a shot
+	if ( Math.random() < dt * 14 ) emit( smokeTex, THREE.NormalBlending, muzzleWorld(), new THREE.Vector3( 0.1, 0.5 + Math.random() * 0.4, ( Math.random() - 0.5 ) * 0.2 ), 0.35, 0.6, 2.5, 0.25 );
+}
+
+const DUST = 260;
+const dustGeo = new THREE.BufferGeometry();
+const dustPos = new Float32Array( DUST * 3 );
+for ( let i = 0; i < DUST; i ++ ) dustPos.set( [ ( Math.random() - 0.3 ) * 9, Math.random() * 6 - 2.4, ( Math.random() - 0.5 ) * 6 ], i * 3 );
+dustGeo.setAttribute( 'position', new THREE.BufferAttribute( dustPos, 3 ) );
+const dust = new THREE.Points( dustGeo, new THREE.PointsMaterial( { map: sparkTex, size: 0.07, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, color: 0xffd9a0 } ) );
+scene.add( dust );
+
+// the dealer: a pale mask and glowing eyes sitting at the far end of the table
+const dealer = new THREE.Group();
+dealer.position.set( 15, - 2.0, - 1.5 );
+dealer.scale.setScalar( 1.35 );
+scene.add( dealer );
+const cloth = new THREE.MeshStandardMaterial( { color: 0x15151c, roughness: 0.9 } );
+const maskMat = new THREE.MeshStandardMaterial( { color: 0xd9d1c1, roughness: 0.6 } );
+const glowRed = new THREE.MeshBasicMaterial( { color: 0xff2a1a, fog: false } );
+const glowWhite = new THREE.MeshBasicMaterial( { color: 0xffe8c0, fog: false } );
+const dTorso = new THREE.Mesh( new THREE.CapsuleGeometry( 1.0, 1.6, 8, 16 ), cloth ); dTorso.position.y = 1.2; dTorso.castShadow = true;
+const dHead = new THREE.Mesh( new THREE.SphereGeometry( 0.78, 24, 16 ), maskMat ); dHead.position.y = 3.5; dHead.scale.set( 0.9, 1.1, 0.9 ); dHead.castShadow = true;
+dealer.add( dTorso, dHead );
+for ( const z of [ - 0.28, 0.28 ] ) { const eye = new THREE.Mesh( new THREE.SphereGeometry( 0.11, 12, 8 ), glowRed ); eye.position.set( - 0.66, 3.65, z ); dealer.add( eye ); }
+const grin = new THREE.Mesh( new THREE.TorusGeometry( 0.3, 0.035, 6, 20, Math.PI ), glowWhite );
+grin.rotation.set( 0, - Math.PI / 2, Math.PI ); grin.position.set( - 0.66, 3.3, 0 ); dealer.add( grin );
+const dealerLight = new THREE.PointLight( 0xff3b2a, 70, 14, 2 );
+dealerLight.position.set( - 3, 3, 0 );
+dealer.add( dealerLight );
+
+// free character: "RobotExpressive" (CC0, Quaternius / Tomás Laulhé) replaces the placeholder figure once it loads
+const proceduralParts = [ dTorso, dHead, grin, ...dealer.children.filter( c => c.material === glowRed ) ];
+let dealerScary = false;
+let dealerModel = null, dealerMixer = null, dealerDead = false;
+const dealerActions = {};
+let dealerCurrent = null;
+function dealerPlay( name, once ) {
+
+	const next = dealerActions[ name ]; if ( ! next ) return;
+	next.reset(); next.enabled = true;
+	if ( once ) { next.setLoop( THREE.LoopOnce, 1 ); next.clampWhenFinished = true; } else next.setLoop( THREE.LoopRepeat, Infinity );
+	if ( dealerCurrent && dealerCurrent !== next ) next.crossFadeFrom( dealerCurrent, 0.25, false );
+	next.play(); dealerCurrent = next;
+
+}
+new GLTFLoader().load( 'assets/RobotExpressive.glb', gltf => {
+
+	dealerModel = gltf.scene;
+	const box = new THREE.Box3().setFromObject( dealerModel );
+	const k = 4.8 / ( box.max.y - box.min.y );
+	dealerModel.scale.setScalar( k );
+	dealerModel.position.y = - box.min.y * k;
+	dealerModel.rotation.y = - Math.PI / 2; // face the gun
+	// make the cheerful robot sinister: scorched rusty shell, glowing red eyes, angry face
+	dealerModel.traverse( o => {
+
+		if ( ! o.isMesh ) return;
+		o.castShadow = true; o.receiveShadow = true;
+		const m = o.material.clone(); o.material = m;
+		if ( m.name === 'Main' ) { m.color.set( 0x3a1a12 ); m.roughness = 0.85; m.metalness = 0.4; }
+		else if ( m.name === 'Grey' ) { m.color.set( 0x1c1c1f ); m.roughness = 0.6; m.metalness = 0.8; }
+		else if ( m.name === 'Black' ) { m.color.set( 0x220000 ); m.emissive = new THREE.Color( 0xff1a0a ); m.emissiveIntensity = 2.5; }
+		if ( o.morphTargetDictionary && 'Angry' in o.morphTargetDictionary ) o.morphTargetInfluences[ o.morphTargetDictionary.Angry ] = 1;
+
+	} );
+	dealerScary = true;
+	proceduralParts.forEach( p => p.visible = false );
+	dealer.scale.setScalar( 1 ); dealer.position.y = - 2.6;
+	dealer.add( dealerModel );
+	dealerMixer = new THREE.AnimationMixer( dealerModel );
+	gltf.animations.forEach( c => { dealerActions[ c.name ] = dealerMixer.clipAction( c ); } );
+	dealerMixer.addEventListener( 'finished', () => { if ( ! dealerDead ) dealerPlay( 'Idle', false ); } );
+	dealerPlay( 'Idle', false );
+
+}, undefined, () => { /* keep the placeholder figure if the asset can't be fetched */ } );
+
+async function dealerHit() {
+
+	dealerLight.intensity = 400; sfx.thud();
+	if ( dealerModel ) dealerPlay( 'No', true );
+	await tween( 0.5, t => {
+
+		dealerLight.intensity = 400 - 330 * t;
+		dealer.position.x = 15 + Math.sin( t * 18 ) * 0.2 * ( 1 - t );
+		if ( ! dealerModel ) dealer.rotation.z = - 0.25 * Math.sin( t * Math.PI );
+
+	} );
+	dealer.position.x = 15; if ( ! dealerModel ) dealer.rotation.z = 0;
+
+}
+const dealerFall = () => {
+
+	if ( dealerModel ) { dealerDead = true; dealerPlay( 'Death', true ); return wait( 2.0 ); }
+	return tween( 1.1, t => { dealer.rotation.z = - 1.45 * t * t; dealer.position.y = - 2.0 - 0.7 * t; }, ease.lin );
+
+};
+const dealerRise = () => {
+
+	if ( dealerModel ) { dealerDead = false; dealerPlay( 'Idle', false ); return wait( 0.6 ); }
+	return tween( 0.6, t => { dealer.rotation.z = - 1.45 * ( 1 - t ); dealer.position.y = - 2.7 + 0.7 * t; }, ease.out );
+
+};
+
+// post-processing (bloom makes the muzzle flash bloom)
+const composer = new EffectComposer( renderer );
+composer.addPass( new RenderPass( scene, camera ) );
+const bloom = new UnrealBloomPass( new THREE.Vector2( innerWidth, innerHeight ), 0.25, 0.6, 0.85 );
+composer.addPass( bloom );
+composer.addPass( new OutputPass() );
+
+// ---------- tiny tween engine ----------
+const tweens = [];
+const ease = { out: t => 1 - Math.pow( 1 - t, 3 ), inOut: t => t < 0.5 ? 2 * t * t : 1 - Math.pow( - 2 * t + 2, 2 ) / 2, lin: t => t };
+function tween( dur, fn, easing = ease.lin ) {
+
+	return new Promise( res => tweens.push( { t: 0, dur, fn, easing, res } ) );
+
+}
+const wait = s => tween( s, () => {} );
+
+// ---------- audio ----------
+let actx, bus, wet;
+function audio() {
+
+	if ( ! actx ) {
+
+		try {
+
+			actx = new ( window.AudioContext || window.webkitAudioContext )();
+			const comp = actx.createDynamicsCompressor();
+			bus = actx.createGain();
+			wet = actx.createGain(); wet.gain.value = 0.35;
+			const conv = actx.createConvolver();
+			const len = actx.sampleRate * 2.4, ir = actx.createBuffer( 2, len, actx.sampleRate );
+			for ( let c = 0; c < 2; c ++ ) {
+
+				const d = ir.getChannelData( c );
+				for ( let i = 0; i < len; i ++ ) d[ i ] = ( Math.random() * 2 - 1 ) * Math.pow( 1 - i / len, 3.2 );
+
+			}
+			conv.buffer = ir;
+			bus.connect( comp ); bus.connect( conv ); conv.connect( wet ); wet.connect( comp );
+			comp.connect( actx.destination );
+
+		} catch ( e ) { actx = null; }
+
+	}
+	if ( actx && actx.state === 'suspended' ) actx.resume();
+	return actx;
+
+}
+function noise( dur, filterType, f0, f1, gain, delay = 0 ) {
+
+	const a = audio(); if ( ! a ) return;
+	const buf = a.createBuffer( 1, Math.ceil( a.sampleRate * dur ), a.sampleRate );
+	const d = buf.getChannelData( 0 );
+	for ( let i = 0; i < d.length; i ++ ) d[ i ] = ( Math.random() * 2 - 1 ) * Math.pow( 1 - i / d.length, 2 );
+	const src = a.createBufferSource(); src.buffer = buf;
+	const f = a.createBiquadFilter(); f.type = filterType;
+	const t0 = a.currentTime + delay;
+	f.frequency.setValueAtTime( f0, t0 );
+	f.frequency.exponentialRampToValueAtTime( f1, t0 + dur );
+	const g = a.createGain(); g.gain.value = gain;
+	src.connect( f ).connect( g ).connect( bus );
+	src.start( t0 );
+
+}
+function tone( freq, dur, gain, type = 'sine', fEnd = freq, delay = 0 ) {
+
+	const a = audio(); if ( ! a ) return;
+	const o = a.createOscillator(); o.type = type;
+	const t0 = a.currentTime + delay;
+	o.frequency.setValueAtTime( freq, t0 );
+	o.frequency.exponentialRampToValueAtTime( fEnd, t0 + dur );
+	const g = a.createGain();
+	g.gain.setValueAtTime( gain, t0 );
+	g.gain.exponentialRampToValueAtTime( 0.0001, t0 + dur );
+	o.connect( g ).connect( bus );
+	o.start( t0 ); o.stop( t0 + dur );
+
+}
+const sfx = {
+	tick: () => { tone( 1500 + Math.random() * 500, 0.025, 0.05, 'square' ); noise( 0.02, 'bandpass', 4000, 3000, 0.15 ); },
+	click: () => { noise( 0.04, 'highpass', 3500, 7000, 0.6 ); tone( 1100, 0.05, 0.14, 'square', 350 ); tone( 220, 0.1, 0.2, 'sine', 120 ); },
+	cock: () => { // two-stage hammer cock
+		noise( 0.05, 'bandpass', 2000, 3000, 0.35 ); tone( 700, 0.05, 0.1, 'square', 1000 );
+		noise( 0.06, 'bandpass', 2600, 3600, 0.4, 0.13 ); tone( 1200, 0.05, 0.1, 'square', 1500, 0.13 );
+	},
+	load: () => { tone( 2400, 0.12, 0.08, 'triangle', 1800 ); noise( 0.05, 'bandpass', 3000, 2000, 0.3 ); },
+	bang: () => {
+
+		noise( 0.12, 'highpass', 2500, 9000, 1.6 ); // crack
+		noise( 1.1, 'lowpass', 5000, 100, 1.6 ); // boom
+		tone( 120, 0.7, 1.0, 'sine', 28 ); // thump
+		const a = audio(); if ( ! a ) return;
+		const now = a.currentTime; // duck, then tinnitus ring
+		bus.gain.setValueAtTime( 1, now ); bus.gain.linearRampToValueAtTime( 0.25, now + 0.15 ); bus.gain.linearRampToValueAtTime( 1, now + 3.5 );
+		const o = a.createOscillator(); o.frequency.value = 4300;
+		const g = a.createGain(); g.gain.setValueAtTime( 0.0001, now ); g.gain.linearRampToValueAtTime( 0.05, now + 0.2 ); g.gain.exponentialRampToValueAtTime( 0.0001, now + 5 );
+		o.connect( g ).connect( a.destination ); o.start( now ); o.stop( now + 5 );
+
+	},
+	blank: () => { noise( 0.08, 'highpass', 2500, 8000, 0.8 ); noise( 0.35, 'lowpass', 3500, 200, 0.7 ); tone( 150, 0.2, 0.4, 'sine', 50 ); },
+	shot: () => { noise( 0.12, 'highpass', 2500, 9000, 1.4 ); noise( 0.9, 'lowpass', 5000, 100, 1.4 ); tone( 120, 0.6, 0.9, 'sine', 28 ); },
+	thud: () => { tone( 90, 0.25, 0.7, 'sine', 40 ); noise( 0.12, 'lowpass', 900, 200, 0.5 ); },
+	exhale: () => { noise( 1.4, 'bandpass', 900, 350, 0.22 ); },
+	creak: () => { tone( 180 + Math.random() * 60, 0.35, 0.03, 'sawtooth', 120 ); },
+	heart: v => { tone( 62, 0.16, 0.5 * v, 'sine', 38 ); tone( 58, 0.16, 0.35 * v, 'sine', 36, 0.17 ); }
+};
+
+// ---------- game state ----------
+let rot = 0; // cylinder angle; chamber k is at the top when rot ≡ -k*STEP
+let cur = 0; // chamber currently under the hammer
+const cfg = { mode: 'random', live: 2 };
+let chambers = []; // 'live' | 'blank' | 'spent' per chamber
+let live = 1, blanks = 5, blanksFired = 0, round = 1;
+const shellsEl = $( 'shells' ), roundEl = $( 'round' );
+const risk = () => Math.min( 1, live / ( CHAMBERS - pulls ) );
+let pulls = 0; // pulls since the last spin
+let score = 0;
+let state = 'busy'; // idle | busy | dead
+let recoil = 0, shake = 0;
+let aim = 0; // 0 = side view, 1 = looking down the barrel
+let aimD = 0; // 1 = over-the-shoulder shot toward the dealer
+let smoking = false;
+let push = 0; // slow dolly toward the muzzle during the standoff
+let hush = false; // dead silence right before the hammer falls
+let drone, droneGain;
+const vigEl = $( 'vig' ), dyingEl = $( 'dying' ), ecgEl = $( 'ecg' );
+let flatOsc = null;
+let ecgStart = - 1; // performance.now() when the shot landed
+const ECG_BEATS = [ [ 0.6, 0.9 ], [ 1.7, 0.7 ], [ 3.1, 0.45 ], [ 5.0, 0.22 ] ];
+const FLAT_AT = 6.2;
+
+function resetDeath() {
+
+	renderer.domElement.style.transition = 'none';
+	renderer.domElement.style.filter = '';
+	dyingEl.style.transition = 'none'; dyingEl.style.opacity = '0'; dyingEl.style.setProperty( '--close', '120%' );
+	ecgEl.style.transition = 'none'; ecgEl.style.opacity = '0';
+	ecgStart = - 1;
+	if ( flatOsc ) { try { flatOsc.stop(); } catch ( e ) {} flatOsc = null; }
+	void dyingEl.offsetWidth;
+	dyingEl.style.transition = ''; ecgEl.style.transition = '';
+
+}
+
+// the moment after the shot: the world drains of colour, the heart stutters, tunnel vision closes in, then a flatline
+async function dying() {
+
+	renderer.domElement.style.transition = 'filter 4s ease-in';
+	renderer.domElement.style.filter = 'grayscale(1) blur(3px) brightness(0.5)';
+	dyingEl.style.opacity = '1'; ecgEl.style.opacity = '1';
+	ecgStart = performance.now();
+	ECG_BEATS.forEach( ( [ at, v ] ) => { tween( at, () => {} ).then( () => { if ( state === 'dead' ) sfx.heart( 0.9 * v ); } ); } );
+	tween( FLAT_AT, () => {} ).then( () => {
+
+		if ( state !== 'dead' ) return;
+		const a = audio(); if ( ! a ) return;
+		flatOsc = a.createOscillator(); flatOsc.frequency.value = 1000;
+		const g = a.createGain(); g.gain.value = 0.05;
+		flatOsc.connect( g ).connect( a.destination ); flatOsc.start();
+
+	} );
+	await tween( FLAT_AT + 0.5, t => { dyingEl.style.setProperty( '--close', ( 120 - 125 * t * t ) + '%' ); }, ease.lin );
+
+}
+
+const ecgCtx = ecgEl.getContext( '2d' );
+function drawEcg() {
+
+	if ( ecgStart < 0 ) return;
+	const W = ecgEl.width, H = ecgEl.height, now = ( performance.now() - ecgStart ) / 1000, win = 4;
+	ecgCtx.clearRect( 0, 0, W, H );
+	ecgCtx.strokeStyle = '#5dff8a'; ecgCtx.lineWidth = 2.5; ecgCtx.shadowColor = '#3f6'; ecgCtx.shadowBlur = 10;
+	ecgCtx.beginPath();
+	for ( let x = 0; x <= W; x ++ ) {
+
+		const t = now - win + ( x / W ) * win;
+		let y = 0;
+		if ( t > 0 && t < FLAT_AT ) for ( const [ at, v ] of ECG_BEATS ) {
+
+			const d = t - at;
+			y += v * ( Math.exp( - Math.pow( d / 0.025, 2 ) ) - 0.25 * Math.exp( - Math.pow( ( d - 0.07 ) / 0.04, 2 ) ) + 0.18 * Math.exp( - Math.pow( ( d - 0.25 ) / 0.07, 2 ) ) );
+
+		}
+		const py = H / 2 - y * H * 0.42;
+		x ? ecgCtx.lineTo( x, py ) : ecgCtx.moveTo( x, py );
+
+	}
+	ecgCtx.stroke();
+
+}
+
+function tension() {
+
+	if ( state === 'dead' ) return 0;
+	if ( cfg.mode === 'buckshot' ) return bsOdds() * ( 0.5 + 0.6 * Math.max( aim, aimD ) );
+	return Math.pow( risk(), 0.8 ) * ( 0.55 + 0.6 * aim );
+
+}
+
+// heartbeat: faster and louder the closer to the bullet you get
+( function heartbeat() {
+
+	const t = tension();
+	vigEl.style.setProperty( '--fear', Math.min( t * 1.1, 1 ).toFixed( 2 ) );
+	if ( state !== 'dead' ) {
+
+		vigEl.classList.add( 'beat' );
+		setTimeout( () => vigEl.classList.remove( 'beat' ), 120 );
+		if ( actx && actx.state === 'running' && ! hush ) sfx.heart( 0.25 + t * 0.9 );
+
+	}
+	setTimeout( heartbeat, 1250 - 750 * Math.min( t, 1 ) );
+
+} )();
+
+function setMsg( t ) { msgEl.textContent = t; }
+function updateUI() {
+
+	if ( cfg.mode === 'buckshot' ) { bsUI(); return; }
+
+	const left = CHAMBERS - pulls;
+	oddsEl.textContent = state === 'dead' ? '' : `다음 발사 실탄일 확률: ${Math.round( risk() * 100 )}%  (남은 칸 ${left}/${CHAMBERS})`;
+	scoreEl.textContent = score; roundEl.textContent = round;
+	const dots = [];
+	for ( let i = 0; i < live; i ++ ) dots.push( '<span class="l">●</span>' );
+	for ( let i = 0; i < blanks; i ++ ) dots.push( i < blanks - blanksFired ? '<span class="b">●</span>' : '<span class="x">○</span>' );
+	shellsEl.innerHTML = state === 'dead' ? '' : dots.join( ' ' ) + `<small>실탄 ${live} · 공포탄 ${blanks - blanksFired}/${blanks}</small>`;
+	resetBtn.disabled = shuffleBtn.disabled = pullBtn.disabled = state !== 'idle';
+	fitView();
+
+}
+
+function spinTo( k ) {
+
+	const base = - k * STEP;
+	const n = Math.ceil( ( base - rot + 6 * Math.PI ) / ( 2 * Math.PI ) );
+	const to = base - 2 * Math.PI * n, from = rot;
+	let lastTick = Math.floor( rot / STEP );
+	return tween( 2.2, t => {
+
+		rot = from + ( to - from ) * t;
+		const idx = Math.floor( rot / STEP );
+		if ( idx !== lastTick ) { lastTick = idx; sfx.tick(); }
+
+	}, ease.out ).then( () => { rot = to; } );
+
+}
+const setAimD = ( to, dur ) => { const from = aimD; return tween( dur, t => { aimD = from + ( to - from ) * t; }, ease.inOut ); };
+const setAim = ( to, dur ) => { const from = aim; return tween( dur, t => { aim = from + ( to - from ) * t; }, ease.inOut ); };
+
+async function reload() {
+
+	// random mode: 1-2 live rounds; custom mode: whatever the player picked. The rest are blanks, shuffled into the cylinder
+	live = cfg.mode === 'custom' ? cfg.live : 1 + Math.floor( Math.random() * 2 );
+	blanks = CHAMBERS - live; blanksFired = 0; pulls = 0;
+	chambers = [ ...Array( live ).fill( 'live' ), ...Array( blanks ).fill( 'blank' ) ];
+	for ( let i = CHAMBERS - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ chambers[ i ], chambers[ j ] ] = [ chambers[ j ], chambers[ i ] ]; }
+	rounds.forEach( ( r, i ) => { r.userData.cap.material = chambers[ i ] === 'live' ? liveMat : blankMat; r.visible = true; } );
+	setMsg( `실탄 ${live}발, 공포탄 ${blanks}발을 장전합니다…` );
+	updateUI();
+	await wait( 0.5 ); sfx.load();
+	await wait( 2.2 ); // time to read the layout before it is hidden
+	rounds.forEach( r => r.visible = false );
+	setMsg( '탄창을 닫고 돌립니다… 배치는 이제 알 수 없습니다.' );
+	cur = Math.floor( Math.random() * CHAMBERS );
+	await spinTo( cur );
+	setMsg( '방아쇠를 당길 준비가 되었나요?' );
+	state = 'idle';
+	updateUI();
+
+}
+
+async function newGame() {
+
+	state = 'busy';
+	overEl.classList.remove( 'show' );
+	smoking = false;
+	resetDeath();
+	score = 0; round = 1;
+	setAim( 0, 0.8 ); setAimD( 0, 0.8 );
+	overTitle.textContent = 'BANG!';
+	if ( cfg.mode === 'buckshot' ) { await bsStart(); return; }
+	await reload();
+
+}
+
+async function resetCylinder() { // dump the cylinder and reload a fresh mix
+
+	if ( state !== 'idle' ) return;
+	audio();
+	state = 'busy';
+	setAim( 0, 0.5 );
+	await reload();
+
+}
+
+async function shuffleOrder() { // rearrange the loaded chambers (spent ones included); the layout stays hidden
+
+	if ( state !== 'idle' ) return;
+	audio();
+	state = 'busy'; updateUI();
+	setMsg( '탄창 순서를 교체합니다…' );
+	for ( let i = CHAMBERS - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ chambers[ i ], chambers[ j ] ] = [ chambers[ j ], chambers[ i ] ]; }
+	cur = Math.floor( Math.random() * CHAMBERS );
+	pulls = 0;
+	await spinTo( cur );
+	setMsg( `순서가 바뀌었습니다. 실탄일 확률은 ${live}/${CHAMBERS}로 초기화됩니다.` );
+	state = 'idle'; updateUI();
+
+}
+
+async function pull() {
+
+	if ( state !== 'idle' ) return;
+	audio();
+	state = 'busy'; updateUI();
+	setMsg( '총구가 당신을 향합니다…' );
+
+	setAim( 1, 1.1 ); // camera swings round to stare down the barrel
+	await wait( 0.5 );
+	sfx.cock();
+	await tween( 0.35, t => { hammer.rotation.z = 0.7 * t; trigger.rotation.z = - 0.35 * t; }, ease.out );
+
+	// the standoff: the trigger is squeezed slowly, the camera creeps in, and the longer you survive the longer it drags on
+	const rk = risk();
+	const dur = 1.6 + rk * 3.2 + Math.random() * 1.2;
+	setMsg( rk > 0.45 ? '숨을 멈추세요…' : '방아쇠가 천천히 당겨집니다…' );
+	let creaked = 0;
+	await tween( dur, t => {
+
+		push = t;
+		trigger.rotation.z = - 0.35 - 0.3 * t;
+		hammer.rotation.z = 0.7 + 0.04 * t;
+		if ( t > creaked + 0.33 ) { creaked += 0.33; sfx.creak(); }
+
+	}, ease.inOut );
+	hush = true; // silence
+	if ( bus ) bus.gain.setTargetAtTime( 0.05, actx.currentTime, 0.05 );
+	await wait( 0.35 + rk * 0.5 );
+	if ( bus ) bus.gain.setTargetAtTime( 1, actx.currentTime, 0.02 );
+	hush = false;
+	await tween( 0.05, t => { hammer.rotation.z = 0.74 * ( 1 - t ); }, ease.lin );
+
+	const kind = chambers[ cur ];
+	if ( kind === 'live' ) {
+
+		bang();
+		return;
+
+	}
+
+	score ++; pulls ++;
+	if ( kind === 'blank' ) { // a blank still goes off - loud, but harmless
+		chambers[ cur ] = 'spent'; blanksFired ++;
+		sfx.blank();
+		shake = 0.3; recoil = 0.35;
+		burst( 0.35 );
+		flashSprite.visible = true; flashLight.intensity = 120; bloom.strength = 0.9;
+		tween( 0.25, t => { flashLight.intensity = 120 * ( 1 - t ); flashSprite.material.opacity = 1 - t; flashSprite.scale.setScalar( 1.2 + t ); bloom.strength = 0.25 + 0.65 * ( 1 - t ); } ).then( () => { flashSprite.visible = false; bloom.strength = 0.25; } );
+		setMsg( '공포탄이었습니다! 소리만 났습니다.' );
+	} else {
+		sfx.click();
+		shake = 0.06;
+		setMsg( '찰칵… 빈 약실입니다.' );
+	}
+	updateUI();
+	sfx.exhale();
+	await wait( 0.7 );
+	setAim( 0, 0.9 );
+	tween( 0.9, t => { push = 1 - t; } );
+	await tween( 0.2, t => { trigger.rotation.z = - 0.35 * ( 1 - t ); }, ease.out );
+
+	if ( blanksFired === blanks ) { // every blank is gone: round cleared, reload with a new random mix
+
+		round ++;
+		setMsg( `라운드 클리어! 공포탄을 모두 소진했습니다. 라운드 ${round} 장전…` );
+		await wait( 1.6 );
+		await reload();
+		return;
+
+	}
+
+	cur = ( cur + 1 ) % CHAMBERS;
+	const from = rot;
+	await tween( 0.3, t => { rot = from - STEP * t; }, ease.inOut );
+	rot = from - STEP;
+	sfx.tick();
+	await wait( 0.5 );
+
+	setMsg( rk < risk() ? '실탄일 확률이 올라갔습니다…' : '다음은…?' );
+	state = 'idle'; updateUI();
+
+}
+
+async function bang() {
+
+	state = 'dead';
+	updateUI();
+	sfx.bang();
+	rounds.forEach( ( r, i ) => { r.visible = i === cur; if ( i === cur ) r.userData.cap.material = liveMat; } );
+	flashSprite.visible = true;
+	burst(); smoking = true;
+	recoil = 1; shake = 0.6; push = 0;
+	setMsg( '' );
+	flashEl.style.background = '#fff';
+	flashEl.style.opacity = '1';
+	await tween( 0.7, t => {
+
+		flashEl.style.opacity = String( Math.pow( 1 - t, 2 ) );
+		flashLight.intensity = 500 * ( 1 - t );
+		bloom.strength = 0.25 + 1.6 * ( 1 - t );
+		flashSprite.material.opacity = 1 - t;
+		flashSprite.scale.setScalar( 2.5 + 5 * t );
+
+	}, ease.out );
+	flashSprite.visible = false;
+	flashLight.intensity = 0;
+	bloom.strength = 0.25;
+
+	if ( cfg.mode !== 'buckshot' && score > best ) {
+
+		best = score;
+		bestEl.textContent = best;
+		try { localStorage.setItem( 'roulette-best', String( best ) ); } catch ( e ) {}
+
+	}
+	await dying();
+	overText.textContent = cfg.mode === 'buckshot' ? `라운드 ${bs.round}에서 쓰러졌습니다. 심장이 멈췄습니다.` : ( score > 0 ? `${score}번 살아남았지만… ` : '첫 발에 당했습니다… ' ) + '심장이 멈췄습니다.';
+	overEl.classList.add( 'show' );
+	updateUI();
+
+}
+
+// ---------- Buckshot mode: duel the dealer with shells, items and three rounds ----------
+const ITEMS = {
+	magnifier: { icon: '🔍', name: '돋보기', desc: '현재 약실의 탄이 실탄인지 공포탄인지 확인합니다.' },
+	beer: { icon: '🍺', name: '맥주', desc: '현재 약실의 탄을 배출합니다 (종류가 공개됩니다).' },
+	cigarette: { icon: '🚬', name: '담배', desc: '체력을 1 회복합니다.' },
+	handcuffs: { icon: '⛓️', name: '수갑', desc: '상대의 다음 턴을 건너뛰게 합니다.' },
+	saw: { icon: '🪚', name: '쇠톱', desc: '이번 발사가 실탄이면 피해가 2배입니다.' },
+	inverter: { icon: '🔄', name: '인버터', desc: '현재 약실의 탄을 실탄↔공포탄으로 뒤집습니다.' },
+	medicine: { icon: '💊', name: '만료된 약', desc: '50% 확률로 체력 2 회복, 아니면 체력 1 손실.' }
+};
+const ITEM_KEYS = Object.keys( ITEMS );
+const MAX_ITEMS = 6;
+const bs = { round: 1, won: 0, hpMax: 3, hp: { player: 3, dealer: 3 }, items: { player: [], dealer: [] }, queue: [], qi: 0, total: 0, liveN: 0, blankN: 0, used: [], known: { player: false, dealer: false }, cuffed: { player: false, dealer: false }, sawed: false, turn: 'player', over: false };
+const other = side => side === 'player' ? 'dealer' : 'player';
+const shuffleArr = a => { for ( let i = a.length - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ a[ i ], a[ j ] ] = [ a[ j ], a[ i ] ]; } return a; };
+const bsRemain = () => bs.queue.slice( bs.qi );
+function bsOdds() { // chance the next shell is live, from the player's point of view
+	const r = bsRemain(); if ( ! r.length ) return 0;
+	return r.filter( x => x === 'live' ).length / r.length;
+}
+const hearts = ( hp, max ) => '❤'.repeat( Math.max( hp, 0 ) ) + '<span class="x">♡</span>'.repeat( Math.max( max - Math.max( hp, 0 ), 0 ) );
+const shellDots = list => list.map( x => x === 'live' ? '<span style="color:#ff4b3a">●</span>' : '<span style="color:#5b8dff">●</span>' ).join( ' ' );
+const roundsRevealed = () => rounds.forEach( r => r.visible = false );
+
+function bsUI() {
+
+	const rem = bsRemain();
+	roundEl.textContent = bs.round + '/3'; scoreEl.textContent = bs.won;
+	shellsEl.innerHTML = bs.total ? `<span class="sh">${shellDots( [ ...Array( bs.liveN ).fill( 'live' ), ...Array( bs.blankN ).fill( 'blank' ) ] )}</span><small>장전: 실탄 ${bs.liveN} · 공포탄 ${bs.blankN} / 남은 탄 ${rem.length}</small>` : '';
+	oddsEl.innerHTML = state === 'dead' ? '' : ( bs.used.length ? `사용된 탄 <span class="sh">${shellDots( bs.used )}</span>` : '' );
+	$( 'dHp' ).innerHTML = hearts( bs.hp.dealer, bs.hpMax );
+	$( 'pHp' ).innerHTML = hearts( bs.hp.player, bs.hpMax );
+	$( 'dStatus' ).textContent = bs.cuffed.dealer ? '⛓ 수갑' : '';
+	$( 'pStatus' ).textContent = [ bs.cuffed.player ? '⛓ 수갑' : '', bs.sawed ? '🪚 쇠톱 장착' : '' ].filter( Boolean ).join( ' ' );
+	$( 'dItems' ).innerHTML = bs.items.dealer.map( k => `<span title="${ITEMS[ k ].desc}">${ITEMS[ k ].icon} ${ITEMS[ k ].name}</span>` ).join( '' );
+	const myTurn = state === 'idle' && bs.turn === 'player' && ! bs.over;
+	const box = $( 'pItems' ); box.innerHTML = '';
+	bs.items.player.forEach( k => {
+
+		const b = document.createElement( 'button' );
+		b.className = 'item'; b.title = ITEMS[ k ].desc; b.textContent = `${ITEMS[ k ].icon} ${ITEMS[ k ].name}`;
+		b.style.pointerEvents = 'auto';
+		b.disabled = ! myTurn || ( k === 'cigarette' && bs.hp.player >= bs.hpMax ) || ( k === 'handcuffs' && bs.cuffed.dealer ) || ( k === 'saw' && bs.sawed );
+		b.onclick = () => playerItem( k );
+		box.appendChild( b );
+
+	} );
+	$( 'shootDealer' ).disabled = $( 'shootSelf' ).disabled = ! myTurn;
+	$( 'shootDealer' ).style.pointerEvents = $( 'shootSelf' ).style.pointerEvents = 'auto';
+
+}
+
+async function bsStart() {
+
+	Object.assign( bs, { round: 1, won: 0, over: false, turn: 'player' } );
+	await bsStartRound();
+
+}
+
+async function bsStartRound() {
+
+	bs.hpMax = 2 + Math.floor( Math.random() * 3 ); // 2-4 charges
+	bs.hp = { player: bs.hpMax, dealer: bs.hpMax };
+	bs.items = { player: [], dealer: [] };
+	bs.cuffed = { player: false, dealer: false }; bs.sawed = false; bs.turn = 'player';
+	bs.total = 0; bs.used = []; bs.queue = []; bs.qi = 0;
+	await dealerRise();
+	setMsg( `라운드 ${bs.round} — 각자 체력 ${bs.hpMax}. 딜러를 쓰러뜨리세요.` );
+	state = 'busy'; bsUI();
+	await wait( 1.8 );
+	await bsLoad();
+	await bsNext();
+
+}
+
+async function bsLoad() {
+
+	state = 'busy';
+	const n = 2 + Math.floor( Math.random() * 5 ); // 2-6 shells
+	const liveN = 1 + Math.floor( Math.random() * ( n - 1 ) ); // at least one live and one blank
+	bs.total = n; bs.liveN = liveN; bs.blankN = n - liveN;
+	bs.queue = shuffleArr( [ ...Array( liveN ).fill( 'live' ), ...Array( n - liveN ).fill( 'blank' ) ] );
+	bs.qi = 0; bs.used = []; bs.sawed = false; bs.known = { player: false, dealer: false };
+	// show the composition (sorted), then hide it and shuffle
+	rounds.forEach( ( r, i ) => { r.visible = i < n; r.userData.cap.material = i < liveN ? liveMat : blankMat; } );
+	setMsg( `실탄 ${liveN}발, 공포탄 ${n - liveN}발을 장전합니다…` );
+	// deal items (none in round 1)
+	const per = bs.round === 1 ? 0 : bs.round === 2 ? 1 + Math.floor( Math.random() * 2 ) : 2 + Math.floor( Math.random() * 3 );
+	for ( const side of [ 'player', 'dealer' ] ) for ( let i = 0; i < per && bs.items[ side ].length < MAX_ITEMS; i ++ ) bs.items[ side ].push( ITEM_KEYS[ Math.floor( Math.random() * ITEM_KEYS.length ) ] );
+	bsUI();
+	await wait( 0.4 ); sfx.load();
+	await wait( 2.6 );
+	roundsRevealed();
+	setMsg( per ? '탄창을 섞습니다… 아이템이 지급되었습니다.' : '탄창을 섞습니다…' );
+	cur = 0;
+	await spinTo( 0 );
+
+}
+
+async function bsNext() {
+
+	if ( bs.over ) return;
+	if ( bs.qi >= bs.queue.length ) { setMsg( '탄창이 비었습니다. 다시 장전합니다…' ); await wait( 1.0 ); await bsLoad(); }
+	const side = bs.turn;
+	if ( bs.cuffed[ side ] ) {
+
+		bs.cuffed[ side ] = false; bsUI();
+		setMsg( side === 'player' ? '⛓ 수갑에 묶여 이번 턴을 건너뜁니다.' : '⛓ 딜러가 수갑에 묶여 턴을 건너뜁니다.' );
+		await wait( 1.6 );
+		bs.turn = other( side );
+		return bsNext();
+
+	}
+	if ( side === 'player' ) {
+
+		state = 'idle';
+		setMsg( bs.used.length ? '당신의 차례입니다.' : '당신의 차례입니다. 딜러 또는 자신에게 발사하거나 아이템을 쓰세요.' );
+		bsUI();
+		return;
+
+	}
+	await dealerTurn();
+
+}
+
+async function advanceChamber() { // eject-or-fire: the cylinder clicks round to the next shell
+
+	cur ++;
+	const from = rot;
+	await tween( 0.3, t => { rot = from - STEP * t; }, ease.inOut );
+	rot = from - STEP; sfx.tick();
+
+}
+
+async function bsLiveFx() {
+
+	sfx.shot(); flashSprite.visible = true; burst();
+	recoil = 1; shake = 0.5;
+	flashEl.style.background = '#fff'; flashEl.style.opacity = '0.9';
+	await tween( 0.5, t => {
+
+		flashEl.style.opacity = String( 0.9 * Math.pow( 1 - t, 2 ) );
+		flashLight.intensity = 400 * ( 1 - t ); bloom.strength = 0.25 + 1.4 * ( 1 - t );
+		flashSprite.material.opacity = 1 - t; flashSprite.scale.setScalar( 2 + 4 * t );
+
+	}, ease.out );
+	flashSprite.visible = false; flashLight.intensity = 0; bloom.strength = 0.25;
+
+}
+async function popBlank() {
+
+	sfx.blank(); shake = 0.3; recoil = 0.35; burst( 0.35 );
+	flashSprite.visible = true; flashLight.intensity = 120; bloom.strength = 0.9;
+	await tween( 0.25, t => { flashLight.intensity = 120 * ( 1 - t ); flashSprite.material.opacity = 1 - t; flashSprite.scale.setScalar( 1.2 + t ); bloom.strength = 0.25 + 0.65 * ( 1 - t ); } );
+	flashSprite.visible = false; flashLight.intensity = 0; bloom.strength = 0.25;
+
+}
+
+async function bsShoot( shooter, target ) {
+
+	state = 'busy'; bsUI();
+	const shell = bs.queue[ bs.qi ], isLive = shell === 'live';
+	const dmg = bs.sawed && isLive ? 2 : 1;
+	const atPlayer = target === 'player';
+	const odds = bs.known[ shooter ] ? ( isLive ? 1 : 0 ) : bsOdds();
+	if ( atPlayer ) setAim( 1, 1.0 ); else setAimD( 1, 1.0 );
+	await wait( 0.5 );
+	sfx.cock();
+	await tween( 0.35, t => { hammer.rotation.z = 0.7 * t; trigger.rotation.z = - 0.35 * t; }, ease.out );
+	let creaked = 0;
+	await tween( 1.0 + odds * 1.8 + Math.random() * 0.6, t => {
+
+		push = t; trigger.rotation.z = - 0.35 - 0.3 * t; hammer.rotation.z = 0.7 + 0.04 * t;
+		if ( t > creaked + 0.33 ) { creaked += 0.33; sfx.creak(); }
+
+	}, ease.inOut );
+	hush = true;
+	if ( bus ) bus.gain.setTargetAtTime( 0.05, actx.currentTime, 0.05 );
+	await wait( 0.3 + odds * 0.4 );
+	if ( bus ) bus.gain.setTargetAtTime( 1, actx.currentTime, 0.02 );
+	hush = false;
+	await tween( 0.05, t => { hammer.rotation.z = 0.74 * ( 1 - t ); }, ease.lin );
+
+	bs.sawed = false;
+	bs.used.push( shell ); bs.qi ++;
+	bs.known = { player: false, dealer: false };
+	const lethal = isLive && atPlayer && bs.hp.player - dmg <= 0;
+	if ( lethal ) { bs.hp.player = 0; bs.over = true; bsUI(); await bang(); return; }
+
+	if ( isLive ) {
+
+		await bsLiveFx();
+		bs.hp[ target ] -= dmg;
+		if ( atPlayer ) {
+
+			setMsg( dmg > 1 ? `💥 실탄! 쇠톱으로 ${dmg}의 피해를 입었습니다.` : '💥 실탄! 체력을 1 잃었습니다.' );
+			flashEl.style.background = '#a00'; flashEl.style.opacity = '0.7';
+			tween( 0.9, t => { flashEl.style.opacity = String( 0.7 * ( 1 - t ) ); } );
+			shake = 0.5;
+
+		} else {
+
+			setMsg( dmg > 1 ? `💥 실탄! 딜러에게 ${dmg}의 피해!` : '💥 실탄! 딜러에게 명중!' );
+			bsUI();
+			await dealerHit();
+
+		}
+
+	} else {
+
+		await popBlank();
+		setMsg( target === shooter ? '공포탄이었습니다. 한 번 더 쏠 수 있습니다.' : '공포탄이었습니다. 턴이 넘어갑니다.' );
+
+	}
+	bsUI();
+	await advanceChamber();
+	tween( 0.9, t => { push = 1 - t; } );
+	await Promise.all( [ setAim( 0, 0.9 ), setAimD( 0, 0.9 ) ] );
+	await wait( 0.8 );
+
+	if ( bs.hp.dealer <= 0 ) { await bsRoundWon(); return; }
+	bs.turn = ( ! isLive && target === shooter ) ? shooter : other( shooter );
+	await bsNext();
+
+}
+
+async function bsRoundWon() {
+
+	state = 'busy'; bsUI();
+	setMsg( '딜러가 쓰러졌습니다!' );
+	await dealerFall();
+	bs.won ++;
+	if ( bs.round >= 3 ) {
+
+		state = 'dead'; bs.over = true; bsUI();
+		setMsg( '' );
+		overTitle.textContent = 'VICTORY';
+		overText.textContent = '딜러를 모두 쓰러뜨리고 살아남았습니다.';
+		overEl.classList.add( 'show' );
+		return;
+
+	}
+	bs.round ++;
+	setMsg( `라운드 클리어! 라운드 ${bs.round}로 넘어갑니다…` );
+	await wait( 1.8 );
+	await bsStartRound();
+
+}
+
+// returns 'ended' when the use of an item finished the round or the match
+async function bsUseItem( side, k ) {
+
+	bs.items[ side ].splice( bs.items[ side ].indexOf( k ), 1 );
+	const who = side === 'player' ? '당신이' : '딜러가';
+	const shell = bs.queue[ bs.qi ];
+	sfx.load();
+	switch ( k ) {
+
+		case 'magnifier':
+			bs.known[ side ] = true;
+			if ( side === 'player' ) {
+
+				setMsg( `🔍 현재 약실: ${shell === 'live' ? '실탄!' : '공포탄'}` );
+				rounds[ cur ].userData.cap.material = shell === 'live' ? liveMat : blankMat; rounds[ cur ].visible = true;
+				bsUI(); await wait( 2.0 ); rounds[ cur ].visible = false;
+
+			} else setMsg( '🔍 딜러가 약실을 확인했습니다.' );
+			break;
+		case 'beer':
+			setMsg( `🍺 ${who} 탄을 배출했습니다: ${shell === 'live' ? '실탄' : '공포탄'}` );
+			sfx.click(); bs.used.push( shell ); bs.qi ++; bs.known = { player: false, dealer: false };
+			bsUI(); await advanceChamber();
+			break;
+		case 'cigarette':
+			bs.hp[ side ] = Math.min( bs.hpMax, bs.hp[ side ] + 1 );
+			setMsg( `🚬 ${who} 담배를 피웠습니다. 체력 +1` );
+			break;
+		case 'handcuffs':
+			bs.cuffed[ other( side ) ] = true;
+			setMsg( `⛓️ ${who} ${side === 'player' ? '딜러' : '당신'}에게 수갑을 채웠습니다.` );
+			break;
+		case 'saw':
+			bs.sawed = true;
+			setMsg( `🪚 ${who} 총신을 잘랐습니다. 실탄이면 피해 2배!` );
+			sfx.creak();
+			break;
+		case 'inverter':
+			bs.queue[ bs.qi ] = shell === 'live' ? 'blank' : 'live';
+			bs.known[ other( side ) ] = false; // the other side's information is now stale
+			setMsg( `🔄 ${who} 약실의 탄을 뒤집었습니다.` );
+			break;
+		case 'medicine':
+			if ( Math.random() < 0.5 ) { bs.hp[ side ] = Math.min( bs.hpMax, bs.hp[ side ] + 2 ); setMsg( `💊 ${who} 만료된 약을 먹었습니다… 체력 +2!` ); }
+			else {
+
+				bs.hp[ side ] -= 1; setMsg( `💊 ${who} 만료된 약을 먹었습니다… 체력 -1…` );
+				if ( bs.hp[ side ] <= 0 ) {
+
+					bsUI(); await wait( 1.2 );
+					if ( side === 'player' ) { bs.over = true; await bang(); } else await bsRoundWon();
+					return 'ended';
+
+				}
+
+			}
+			break;
+
+	}
+	bsUI();
+	await wait( 0.9 );
+
+}
+
+async function playerItem( k ) {
+
+	if ( state !== 'idle' || bs.turn !== 'player' || bs.over ) return;
+	audio();
+	state = 'busy'; bsUI();
+	if ( await bsUseItem( 'player', k ) === 'ended' ) return;
+	if ( bs.qi >= bs.queue.length ) { await bsNext(); return; } // a beer emptied the cylinder
+	state = 'idle'; bsUI();
+
+}
+
+async function dealerTurn() {
+
+	state = 'busy'; bsUI();
+	setMsg( '딜러의 차례입니다…' );
+	await wait( 1.2 );
+	const has = k => bs.items.dealer.includes( k );
+	const use = async k => { const r = await bsUseItem( 'dealer', k ); await wait( 0.5 ); return r; };
+	for ( let guard = 0; guard < 14; guard ++ ) {
+
+		const rem = bsRemain();
+		const shell = bs.queue[ bs.qi ], known = bs.known.dealer;
+		let k = null;
+		if ( has( 'cigarette' ) && bs.hp.dealer < bs.hpMax ) k = 'cigarette';
+		else if ( has( 'handcuffs' ) && ! bs.cuffed.player ) k = 'handcuffs';
+		else if ( has( 'magnifier' ) && ! known ) k = 'magnifier';
+		else if ( has( 'beer' ) && ! known && rem.length > 1 && Math.random() < 0.6 ) k = 'beer';
+		else if ( has( 'inverter' ) && known && shell === 'blank' ) k = 'inverter';
+		else if ( has( 'medicine' ) && bs.hp.dealer <= 2 && Math.random() < 0.4 ) k = 'medicine';
+		if ( ! k ) break;
+		if ( await use( k ) === 'ended' ) return;
+		if ( bs.qi >= bs.queue.length ) { await bsNext(); return; }
+
+	}
+	const shell = bs.queue[ bs.qi ], known = bs.known.dealer;
+	const pl = known ? ( shell === 'live' ? 1 : 0 ) : bsOdds();
+	const target = pl > 0.5 ? 'player' : ( pl < 0.5 ? 'dealer' : ( Math.random() < 0.5 ? 'player' : 'dealer' ) );
+	if ( target === 'player' && has( 'saw' ) && ! bs.sawed && ( known ? shell === 'live' : pl > 0.6 ) ) { if ( await use( 'saw' ) === 'ended' ) return; }
+	setMsg( target === 'player' ? '딜러가 당신에게 총을 겨눕니다…' : '딜러가 자기 자신에게 총을 겨눕니다…' );
+	await wait( 1.0 );
+	await bsShoot( 'dealer', target );
+
+}
+
+$( 'shootDealer' ).onclick = () => { if ( state === 'idle' && bs.turn === 'player' ) { audio(); bsShoot( 'player', 'dealer' ); } };
+$( 'shootSelf' ).onclick = () => { if ( state === 'idle' && bs.turn === 'player' ) { audio(); bsShoot( 'player', 'player' ); } };
+
+
+
+const fsBtn = $( 'fs' );
+function toggleFullscreen() {
+
+	const el = document.documentElement;
+	const on = document.fullscreenElement || document.webkitFullscreenElement;
+	try {
+
+		if ( on ) ( document.exitFullscreen || document.webkitExitFullscreen ).call( document );
+		else ( el.requestFullscreen || el.webkitRequestFullscreen ).call( el );
+
+	} catch ( e ) {}
+
+}
+if ( ! ( document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen ) ) fsBtn.style.display = 'none';
+fsBtn.onclick = e => { toggleFullscreen(); e.currentTarget.blur(); };
+const syncFs = () => { fsBtn.textContent = ( document.fullscreenElement || document.webkitFullscreenElement ) ? '✕' : '⛶'; };
+document.addEventListener( 'fullscreenchange', syncFs );
+document.addEventListener( 'webkitfullscreenchange', syncFs );
+
+resetBtn.onclick = resetCylinder;
+shuffleBtn.onclick = shuffleOrder;
+
+// ---------- start / mode menu ----------
+const startEl = $( 'start' ), modesEl = $( 'modes' ), customEl = $( 'custom' ), startMain = $( 'startMain' );
+function showMenu( modes ) {
+
+	state = 'menu'; updateUI();
+	overEl.classList.remove( 'show' );
+	startEl.classList.remove( 'hide' );
+	startMain.style.display = modes ? 'none' : '';
+	modesEl.style.display = modes ? '' : 'none';
+	customEl.style.display = 'none';
+
+}
+function beginGame( mode ) {
+
+	audio();
+	cfg.mode = mode;
+	document.body.classList.toggle( 'bs', mode === 'buckshot' );
+	startEl.classList.add( 'hide' );
+	newGame();
+
+}
+function syncCustom() { $( 'liveVal' ).textContent = cfg.live; $( 'blankVal' ).textContent = CHAMBERS - cfg.live; }
+const adjust = d => { cfg.live = Math.max( 1, Math.min( CHAMBERS - 1, cfg.live + d ) ); syncCustom(); };
+$( 'startBtn' ).onclick = () => { audio(); showMenu( true ); };
+$( 'modeRandom' ).onclick = () => beginGame( 'random' );
+$( 'modeBuck' ).onclick = () => { location.href = 'buckshot.html'; }; // full first-person Buckshot scene
+$( 'modeCustom' ).onclick = () => { customEl.style.display = 'flex'; syncCustom(); };
+$( 'liveMinus' ).onclick = () => adjust( - 1 );
+$( 'livePlus' ).onclick = () => adjust( 1 );
+$( 'blankMinus' ).onclick = () => adjust( 1 ); // fewer blanks = more live rounds
+$( 'blankPlus' ).onclick = () => adjust( - 1 );
+$( 'customGo' ).onclick = () => beginGame( 'custom' );
+$( 'toMenu' ).onclick = () => showMenu( true );
+$( 'modeBtn' ).onclick = e => { e.currentTarget.blur(); if ( state === 'idle' || state === 'dead' ) showMenu( true ); };
+pullBtn.onclick = pull;
+againBtn.onclick = () => { audio(); newGame(); };
+addEventListener( 'keydown', e => {
+
+	if ( e.repeat ) return;
+	if ( state === 'menu' ) return;
+	if ( cfg.mode === 'buckshot' ) { if ( e.code === 'Space' && state === 'dead' ) { e.preventDefault(); audio(); newGame(); } return; }
+	if ( e.code === 'Space' ) { e.preventDefault(); if ( state === 'dead' ) { audio(); newGame(); } else pull(); }
+	else if ( e.code === 'KeyS' ) shuffleOrder();
+	else if ( e.code === 'KeyR' ) resetCylinder();
+	else if ( e.code === 'KeyF' ) toggleFullscreen();
+
+} );
+
+// ---------- loop ----------
+const mouse = new THREE.Vector2();
+addEventListener( 'pointermove', e => { mouse.set( e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1 ); } );
+addEventListener( 'resize', () => {
+
+	camera.aspect = innerWidth / innerHeight;
+	camera.updateProjectionMatrix();
+	fitView();
+	renderer.setSize( innerWidth, innerHeight );
+	composer.setSize( innerWidth, innerHeight );
+
+} );
+
+fitView();
+const barrelCam = new THREE.Vector3( 8.2, 0.55, 0.9 );
+const dealerCam = new THREE.Vector3( - 3.5, 1.8, 2.8 );
+const dealerTarget = new THREE.Vector3( 13.5, 0.3, - 1.5 );
+const barrelTarget = new THREE.Vector3( 2.2, 0.0, 0 );
+const tmpPos = new THREE.Vector3(), tmpTarget = new THREE.Vector3();
+const clock = new THREE.Clock();
+renderer.setAnimationLoop( () => {
+
+	const dt = Math.min( clock.getDelta(), 0.05 );
+	const time = clock.elapsedTime;
+
+	for ( let i = tweens.length - 1; i >= 0; i -- ) {
+
+		const tw = tweens[ i ];
+		tw.t += dt;
+		const p = Math.min( tw.t / tw.dur, 1 );
+		tw.fn( tw.easing( p ) );
+		if ( p >= 1 ) { tweens.splice( i, 1 ); tw.res(); }
+
+	}
+
+	// particles
+	if ( smoking ) trickleSmoke( dt );
+	for ( let i = particles.length - 1; i >= 0; i -- ) {
+
+		const p = particles[ i ];
+		p.age += dt;
+		const k = p.age / p.life;
+		if ( k >= 1 ) { scene.remove( p.sp ); p.sp.material.dispose(); particles.splice( i, 1 ); continue; }
+		p.sp.position.addScaledVector( p.vel, dt );
+		p.vel.multiplyScalar( Math.pow( 0.35, dt ) );
+		p.sp.scale.addScalar( p.grow * dt );
+		p.sp.material.opacity = p.op * ( 1 - k );
+
+	}
+	const dp = dustGeo.attributes.position;
+	for ( let i = 0; i < DUST; i ++ ) {
+
+		dp.setY( i, dp.getY( i ) + Math.sin( time * 0.3 + i ) * 0.0015 - 0.0006 );
+		dp.setX( i, dp.getX( i ) + Math.cos( time * 0.2 + i * 1.7 ) * 0.001 );
+		if ( dp.getY( i ) < - 2.5 ) dp.setY( i, 3.5 );
+
+	}
+	dp.needsUpdate = true;
+
+	cyl.rotation.x = rot;
+	dealer.visible = cfg.mode === 'buckshot';
+	if ( dealerMixer ) dealerMixer.update( dt );
+	if ( dealerScary && dealerLight.intensity < 100 ) dealerLight.intensity = 50 + Math.random() * 30 * ( Math.random() < 0.08 ? 0 : 1 );
+
+	const T = tension();
+	if ( actx && ! drone ) { // low drone that swells with the odds
+		drone = [ 55, 55.7, 82.4 ].map( f => { const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; return o; } );
+		droneGain = actx.createGain(); droneGain.gain.value = 0;
+		const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220;
+		drone.forEach( o => { o.connect( lp ); o.start(); } ); lp.connect( droneGain ).connect( bus );
+	}
+	if ( droneGain ) droneGain.gain.setTargetAtTime( state === 'dead' || hush ? 0 : 0.015 + T * 0.09, actx.currentTime, 0.4 );
+	// lights sag and flicker as the risk climbs
+	spot.intensity = 320 * ( 1 - 0.3 * T ) * ( 1 + ( Math.random() - 0.5 ) * 0.35 * T * T );
+
+	recoil *= Math.pow( 0.002, dt );
+	const tr = T * T * 0.012; // hand tremor
+	gun.rotation.z = recoil * 0.45 + ( Math.random() - 0.5 ) * tr;
+	gun.rotation.y = ( Math.random() - 0.5 ) * tr;
+	gun.position.x = GUN_X - recoil * 0.5;
+	gun.position.y = Math.sin( time * 1.2 ) * 0.03 * ( 1 - aim * 0.5 );
+
+	// camera: orbit-ish side view blended with a down-the-barrel view, plus breathing, shake and fear tremble
+	shake *= Math.pow( 0.005, dt );
+	const tremble = 0.004 * tension() * 4;
+	const e = aim * aim * ( 3 - 2 * aim );
+	tmpPos.set( camBase.x + mouse.x * 0.6 * ( 1 - e ), camBase.y - mouse.y * 0.4 * ( 1 - e ), camBase.z ).lerp( barrelCam, e );
+	tmpPos.x -= push * 1.0 * e; tmpPos.y -= push * 0.15 * e;
+	tmpPos.x += ( Math.random() - 0.5 ) * ( shake + tremble ) + Math.sin( time * 0.8 ) * 0.03;
+	tmpPos.y += ( Math.random() - 0.5 ) * ( shake + tremble ) + Math.sin( time * 1.1 ) * 0.03;
+	tmpPos.z += ( Math.random() - 0.5 ) * ( shake + tremble );
+	tmpTarget.copy( camTarget ).lerp( barrelTarget, e );
+	const eD = aimD * aimD * ( 3 - 2 * aimD );
+	tmpPos.lerp( dealerCam, eD ); tmpTarget.lerp( dealerTarget, eD );
+	camera.position.copy( tmpPos );
+	camera.lookAt( tmpTarget );
+	const fov = 40 - 8 * e - 6 * push * e - 4 * eD;
+	if ( camera.fov !== fov ) { camera.fov = fov; camera.updateProjectionMatrix(); }
+
+	drawEcg();
+	composer.render();
+
+} );
+
+showMenu( false );
+</script>
+</body>
+</html>
