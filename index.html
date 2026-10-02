@@ -16,6 +16,9 @@
 	#stats b { font-size: 20px; color: #ffd27a; }
 	#bottom { display: flex; flex-direction: column; align-items: center; gap: 14px; padding-bottom: 8px; }
 	#msg { min-height: 1.6em; font-size: 18px; text-align: center; text-shadow: 0 2px 8px #000; }
+	#shells { font-size: 22px; letter-spacing: 0.2em; min-height: 1.4em; text-shadow: 0 2px 8px #000; }
+	#shells .l { color: #ff4b3a; } #shells .b { color: #5b8dff; } #shells .x { color: #555; }
+	#shells small { font-size: 13px; letter-spacing: 0.05em; margin-left: 10px; opacity: .85; }
 	#odds { font-size: 13px; opacity: 0.8; }
 	.row { display: flex; gap: 12px; pointer-events: auto; }
 	button { font: inherit; font-weight: 700; letter-spacing: 0.08em; padding: 14px 26px; border-radius: 8px; border: 1px solid #5a5248; background: #1c1a17; color: var(--fg); cursor: pointer; transition: transform .1s, background .15s, opacity .2s; }
@@ -50,10 +53,11 @@
 <div id="hud">
 	<div id="top">
 		<h1>Russian Roulette</h1>
-		<div id="stats"><button id="fs" title="전체화면 (F)" aria-label="전체화면">⛶</button><br>생존 <b id="score">0</b>회<br>최고 기록 <b id="best">0</b>회</div>
+		<div id="stats"><button id="fs" title="전체화면 (F)" aria-label="전체화면">⛶</button><br>라운드 <b id="round">1</b><br>생존 <b id="score">0</b>회<br>최고 기록 <b id="best">0</b>회</div>
 	</div>
 	<div id="bottom">
 		<div id="msg"></div>
+		<div id="shells"></div>
 		<div id="odds"></div>
 		<div class="row">
 			<button id="spin">탄창 돌리기 (S)</button>
@@ -229,6 +233,8 @@ gun.add( cyl );
 const R_RING = 0.46;
 mesh( new THREE.CylinderGeometry( 0.78, 0.78, 1.2, 64 ).rotateZ( Math.PI / 2 ), steel, 0, 0, 0, cyl );
 for ( const sx of [ - 0.6, 0.6 ] ) mesh( new THREE.TorusGeometry( 0.77, 0.025, 8, 64 ).rotateY( Math.PI / 2 ), darkSteel, sx, 0, 0, cyl );
+const liveMat = new THREE.MeshStandardMaterial( { color: 0xd01818, metalness: 0.2, roughness: 0.4, emissive: 0x300000 } );
+const blankMat = new THREE.MeshStandardMaterial( { color: 0x3b6fd8, metalness: 0.2, roughness: 0.4, emissive: 0x0a1230 } );
 const rounds = [];
 for ( let i = 0; i < CHAMBERS; i ++ ) {
 
@@ -242,7 +248,7 @@ for ( let i = 0; i < CHAMBERS; i ++ ) {
 	r.position.set( - 0.55, y, z );
 	mesh( new THREE.CylinderGeometry( 0.14, 0.14, 0.22, 24 ).rotateZ( Math.PI / 2 ), brass, 0, 0, 0, r );
 	mesh( new THREE.CylinderGeometry( 0.06, 0.06, 0.02, 16 ).rotateZ( Math.PI / 2 ), darkSteel, - 0.115, 0, 0, r ); // primer
-	mesh( new THREE.TorusGeometry( 0.1, 0.012, 6, 20 ).rotateY( Math.PI / 2 ), brass, - 0.11, 0, 0, r );
+	r.userData.cap = mesh( new THREE.CylinderGeometry( 0.135, 0.135, 0.03, 24 ).rotateZ( Math.PI / 2 ), liveMat, - 0.105, 0, 0, r );
 	r.visible = false;
 	cyl.add( r );
 	rounds.push( r );
@@ -357,11 +363,11 @@ function emit( tex, blending, pos, vel, size, grow, life, opacity, color = 0xfff
 
 }
 const muzzleWorld = () => gun.localToWorld( new THREE.Vector3( 3.5, R_RING, 0 ) );
-function burst() {
+function burst( k = 1 ) {
 
 	const p = muzzleWorld();
-	for ( let i = 0; i < 14; i ++ ) emit( smokeTex, THREE.NormalBlending, p.clone(), new THREE.Vector3( Math.random() * 0.5, 0.2 + Math.random() * 0.8, ( Math.random() - 0.5 ) * 1.2 ), 0.3 + Math.random() * 0.3, 0.5 + Math.random() * 0.5, 2.5 + Math.random() * 2, 0.28 );
-	for ( let i = 0; i < 40; i ++ ) emit( sparkTex, THREE.AdditiveBlending, p.clone(), new THREE.Vector3( 0.5 + Math.random() * 3, ( Math.random() - 0.5 ) * 4, ( Math.random() - 0.5 ) * 4 ), 0.08 + Math.random() * 0.1, - 0.05, 0.25 + Math.random() * 0.5, 1 );
+	for ( let i = 0; i < Math.round( 14 * k ); i ++ ) emit( smokeTex, THREE.NormalBlending, p.clone(), new THREE.Vector3( Math.random() * 0.5, 0.2 + Math.random() * 0.8, ( Math.random() - 0.5 ) * 1.2 ), 0.3 + Math.random() * 0.3, 0.5 + Math.random() * 0.5, 2.5 + Math.random() * 2, 0.28 );
+	for ( let i = 0; i < Math.round( 40 * k ); i ++ ) emit( sparkTex, THREE.AdditiveBlending, p.clone(), new THREE.Vector3( 0.5 + Math.random() * 3, ( Math.random() - 0.5 ) * 4, ( Math.random() - 0.5 ) * 4 ), 0.08 + Math.random() * 0.1, - 0.05, 0.25 + Math.random() * 0.5, 1 );
 
 }
 function trickleSmoke( dt ) { // wisps rising from the barrel after a shot
@@ -475,6 +481,7 @@ const sfx = {
 		o.connect( g ).connect( a.destination ); o.start( now ); o.stop( now + 5 );
 
 	},
+	blank: () => { noise( 0.08, 'highpass', 2500, 8000, 0.8 ); noise( 0.35, 'lowpass', 3500, 200, 0.7 ); tone( 150, 0.2, 0.4, 'sine', 50 ); },
 	exhale: () => { noise( 1.4, 'bandpass', 900, 350, 0.22 ); },
 	creak: () => { tone( 180 + Math.random() * 60, 0.35, 0.03, 'sawtooth', 120 ); },
 	heart: v => { tone( 62, 0.16, 0.5 * v, 'sine', 38 ); tone( 58, 0.16, 0.35 * v, 'sine', 36, 0.17 ); }
@@ -483,7 +490,10 @@ const sfx = {
 // ---------- game state ----------
 let rot = 0; // cylinder angle; chamber k is at the top when rot ≡ -k*STEP
 let cur = 0; // chamber currently under the hammer
-let bullet = 0;
+let chambers = []; // 'live' | 'blank' | 'spent' per chamber
+let live = 1, blanks = 5, blanksFired = 0, round = 1;
+const shellsEl = $( 'shells' ), roundEl = $( 'round' );
+const risk = () => Math.min( 1, live / ( CHAMBERS - pulls ) );
 let pulls = 0; // pulls since the last spin
 let score = 0;
 let state = 'busy'; // idle | busy | dead
@@ -559,7 +569,7 @@ function drawEcg() {
 
 }
 
-function tension() { return state === 'dead' ? 0 : Math.pow( 1 / ( CHAMBERS - pulls ), 0.8 ) * ( 0.55 + 0.6 * aim ); }
+function tension() { return state === 'dead' ? 0 : Math.pow( risk(), 0.8 ) * ( 0.55 + 0.6 * aim ); }
 
 // heartbeat: faster and louder the closer to the bullet you get
 ( function heartbeat() {
@@ -581,8 +591,12 @@ function setMsg( t ) { msgEl.textContent = t; }
 function updateUI() {
 
 	const left = CHAMBERS - pulls;
-	oddsEl.textContent = state === 'dead' ? '' : `다음 발사 위험 확률: ${Math.round( 100 / left )}%  (남은 칸 ${left}/${CHAMBERS})`;
-	scoreEl.textContent = score;
+	oddsEl.textContent = state === 'dead' ? '' : `다음 발사 실탄일 확률: ${Math.round( risk() * 100 )}%  (남은 칸 ${left}/${CHAMBERS})`;
+	scoreEl.textContent = score; roundEl.textContent = round;
+	const dots = [];
+	for ( let i = 0; i < live; i ++ ) dots.push( '<span class="l">●</span>' );
+	for ( let i = 0; i < blanks; i ++ ) dots.push( i < blanks - blanksFired ? '<span class="b">●</span>' : '<span class="x">○</span>' );
+	shellsEl.innerHTML = state === 'dead' ? '' : dots.join( ' ' ) + `<small>실탄 ${live} · 공포탄 ${blanks - blanksFired}/${blanks}</small>`;
 	spinBtn.disabled = pullBtn.disabled = state !== 'idle';
 
 }
@@ -604,27 +618,37 @@ function spinTo( k ) {
 }
 const setAim = ( to, dur ) => { const from = aim; return tween( dur, t => { aim = from + ( to - from ) * t; }, ease.inOut ); };
 
+async function reload() {
+
+	// random number of live rounds (1-5); the rest are blanks, shuffled into the cylinder
+	live = 1 + Math.floor( Math.random() * ( CHAMBERS - 1 ) );
+	blanks = CHAMBERS - live; blanksFired = 0; pulls = 0;
+	chambers = [ ...Array( live ).fill( 'live' ), ...Array( blanks ).fill( 'blank' ) ];
+	for ( let i = CHAMBERS - 1; i > 0; i -- ) { const j = Math.floor( Math.random() * ( i + 1 ) ); [ chambers[ i ], chambers[ j ] ] = [ chambers[ j ], chambers[ i ] ]; }
+	rounds.forEach( ( r, i ) => { r.userData.cap.material = chambers[ i ] === 'live' ? liveMat : blankMat; r.visible = true; } );
+	setMsg( `실탄 ${live}발, 공포탄 ${blanks}발을 장전합니다…` );
+	updateUI();
+	await wait( 0.5 ); sfx.load();
+	await wait( 2.2 ); // time to read the layout before it is hidden
+	rounds.forEach( r => r.visible = false );
+	setMsg( '탄창을 닫고 돌립니다… 배치는 이제 알 수 없습니다.' );
+	cur = Math.floor( Math.random() * CHAMBERS );
+	await spinTo( cur );
+	setMsg( '방아쇠를 당길 준비가 되었나요?' );
+	state = 'idle';
+	updateUI();
+
+}
+
 async function newGame() {
 
 	state = 'busy';
 	overEl.classList.remove( 'show' );
 	smoking = false;
 	resetDeath();
-	score = 0; pulls = 0;
+	score = 0; round = 1;
 	setAim( 0, 0.8 );
-	bullet = Math.floor( Math.random() * CHAMBERS );
-	rounds.forEach( ( r, i ) => r.visible = i === bullet );
-	setMsg( '총알 1발을 장전합니다…' );
-	updateUI();
-	await wait( 0.5 ); sfx.load();
-	await wait( 1.2 );
-	rounds.forEach( r => r.visible = false );
-	setMsg( '탄창을 닫고 돌립니다…' );
-	cur = Math.floor( Math.random() * CHAMBERS );
-	await spinTo( cur );
-	setMsg( '방아쇠를 당길 준비가 되었나요?' );
-	state = 'idle';
-	updateUI();
+	await reload();
 
 }
 
@@ -637,7 +661,7 @@ async function spin() {
 	cur = Math.floor( Math.random() * CHAMBERS );
 	pulls = 0;
 	await spinTo( cur );
-	setMsg( '다시 섞었습니다. 확률은 1/6로 초기화됩니다.' );
+	setMsg( `다시 섞었습니다. 실탄일 확률은 ${live}/${CHAMBERS}로 초기화됩니다.` );
 	state = 'idle'; updateUI();
 
 }
@@ -655,9 +679,9 @@ async function pull() {
 	await tween( 0.35, t => { hammer.rotation.z = 0.7 * t; trigger.rotation.z = - 0.35 * t; }, ease.out );
 
 	// the standoff: the trigger is squeezed slowly, the camera creeps in, and the longer you survive the longer it drags on
-	const risk = 1 / ( CHAMBERS - pulls );
-	const dur = 1.6 + risk * 3.2 + Math.random() * 1.2;
-	setMsg( risk > 0.45 ? '숨을 멈추세요…' : '방아쇠가 천천히 당겨집니다…' );
+	const rk = risk();
+	const dur = 1.6 + rk * 3.2 + Math.random() * 1.2;
+	setMsg( rk > 0.45 ? '숨을 멈추세요…' : '방아쇠가 천천히 당겨집니다…' );
 	let creaked = 0;
 	await tween( dur, t => {
 
@@ -669,27 +693,49 @@ async function pull() {
 	}, ease.inOut );
 	hush = true; // silence
 	if ( bus ) bus.gain.setTargetAtTime( 0.05, actx.currentTime, 0.05 );
-	await wait( 0.35 + risk * 0.5 );
+	await wait( 0.35 + rk * 0.5 );
 	if ( bus ) bus.gain.setTargetAtTime( 1, actx.currentTime, 0.02 );
 	hush = false;
 	await tween( 0.05, t => { hammer.rotation.z = 0.74 * ( 1 - t ); }, ease.lin );
 
-	if ( cur === bullet ) {
+	const kind = chambers[ cur ];
+	if ( kind === 'live' ) {
 
 		bang();
 		return;
 
 	}
 
-	sfx.click();
-	shake = 0.06;
 	score ++; pulls ++;
-	setMsg( '찰칵… 살아남았습니다.' );
+	if ( kind === 'blank' ) { // a blank still goes off - loud, but harmless
+		chambers[ cur ] = 'spent'; blanksFired ++;
+		sfx.blank();
+		shake = 0.3; recoil = 0.35;
+		burst( 0.35 );
+		flashSprite.visible = true; flashLight.intensity = 120; bloom.strength = 0.9;
+		tween( 0.25, t => { flashLight.intensity = 120 * ( 1 - t ); flashSprite.material.opacity = 1 - t; flashSprite.scale.setScalar( 1.2 + t ); bloom.strength = 0.25 + 0.65 * ( 1 - t ); } ).then( () => { flashSprite.visible = false; bloom.strength = 0.25; } );
+		setMsg( '공포탄이었습니다! 소리만 났습니다.' );
+	} else {
+		sfx.click();
+		shake = 0.06;
+		setMsg( '찰칵… 빈 약실입니다.' );
+	}
+	updateUI();
 	sfx.exhale();
 	await wait( 0.7 );
 	setAim( 0, 0.9 );
 	tween( 0.9, t => { push = 1 - t; } );
 	await tween( 0.2, t => { trigger.rotation.z = - 0.35 * ( 1 - t ); }, ease.out );
+
+	if ( blanksFired === blanks ) { // every blank is gone: round cleared, reload with a new random mix
+
+		round ++;
+		setMsg( `라운드 클리어! 공포탄을 모두 소진했습니다. 라운드 ${round} 장전…` );
+		await wait( 1.6 );
+		await reload();
+		return;
+
+	}
 
 	cur = ( cur + 1 ) % CHAMBERS;
 	const from = rot;
@@ -698,7 +744,7 @@ async function pull() {
 	sfx.tick();
 	await wait( 0.5 );
 
-	setMsg( pulls >= 4 ? '이제 남은 칸이 거의 없습니다…' : pulls >= 2 ? '점점 확률이 높아집니다…' : '다음은…?' );
+	setMsg( rk < risk() ? '실탄일 확률이 올라갔습니다…' : '다음은…?' );
 	state = 'idle'; updateUI();
 
 }
@@ -708,7 +754,7 @@ async function bang() {
 	state = 'dead';
 	updateUI();
 	sfx.bang();
-	rounds.forEach( ( r, i ) => r.visible = i === bullet );
+	rounds.forEach( ( r, i ) => { r.visible = i === cur; if ( i === cur ) r.userData.cap.material = liveMat; } );
 	flashSprite.visible = true;
 	burst(); smoking = true;
 	recoil = 1; shake = 0.6; push = 0;
